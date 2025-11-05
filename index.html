@@ -21,7 +21,6 @@
   .buttons { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
   button { appearance:none; border:none; padding:12px 16px; border-radius:10px; font-size:16px; cursor:pointer; background:var(--accent); color:#fff; }
   button.secondary { background:#d1d1d6; color:#111; }
-  button.danger { background:var(--danger); }
   .card { background:#fff; border:1px solid #e5e5ea; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
   .big { font-weight:700; font-size:40px; text-align:center; line-height:1.25; }
   .input-inline { display:flex; gap:10px; justify-content:center; margin:14px 0 6px; }
@@ -32,6 +31,10 @@
   .bad { color:var(--danger); font-weight:600; }
   hr { border:none; border-top:1px solid #eee; margin:16px 0; }
   .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  .advbox { background:#fafafa; border:1px dashed #d0d0d0; border-radius:12px; padding:12px; margin-top:10px; }
+  table { border-collapse: collapse; width:100%; }
+  th, td { border-bottom:1px solid #eee; padding:8px; text-align:center; }
+  th { font-weight:600; }
   @media (max-width:700px){ .grid { grid-template-columns: 1fr; } }
 </style>
 </head>
@@ -61,13 +64,14 @@
       <div class="toggle" data-op="/">÷</div>
     </div>
 
+    <!-- Gemeinsamer Bereich -->
     <div class="row" style="margin-top:10px">
       <div class="col">
-        <label for="min">Minimum</label>
+        <label for="min">Gemeinsames Minimum</label>
         <input id="min" type="number" value="1">
       </div>
       <div class="col">
-        <label for="max">Maximum</label>
+        <label for="max">Gemeinsames Maximum</label>
         <input id="max" type="number" value="150">
       </div>
       <div class="col">
@@ -93,6 +97,45 @@
       <div class="col">
         <label for="think">Denkpause vor Lösungen (s)</label>
         <input id="think" type="number" step="1" value="0">
+      </div>
+    </div>
+
+    <!-- Erweiterte Einstellungen je Rechenart -->
+    <div class="advbox">
+      <label><input id="advToggle" type="checkbox"> Erweiterte Einstellungen je Rechenart verwenden</label>
+      <div id="advPanel" style="display:none; margin-top:8px">
+        <table>
+          <thead>
+            <tr><th>Operator</th><th>Aktiv</th><th>Min</th><th>Max</th><th>Gewichtung</th></tr>
+          </thead>
+          <tbody>
+            <tr data-op="+"><td>+</td>
+              <td><input type="checkbox" class="op-active" checked></td>
+              <td><input type="number" class="op-min" value="1"></td>
+              <td><input type="number" class="op-max" value="150"></td>
+              <td><input type="number" class="op-weight" value="1" min="0" step="1"></td>
+            </tr>
+            <tr data-op="-"><td>−</td>
+              <td><input type="checkbox" class="op-active"></td>
+              <td><input type="number" class="op-min" value="1"></td>
+              <td><input type="number" class="op-max" value="150"></td>
+              <td><input type="number" class="op-weight" value="1" min="0" step="1"></td>
+            </tr>
+            <tr data-op="*"><td>×</td>
+              <td><input type="checkbox" class="op-active"></td>
+              <td><input type="number" class="op-min" value="1"></td>
+              <td><input type="number" class="op-max" value="12"></td>
+              <td><input type="number" class="op-weight" value="1" min="0" step="1"></td>
+            </tr>
+            <tr data-op="/"><td>÷</td>
+              <td><input type="checkbox" class="op-active"></td>
+              <td><input type="number" class="op-min" value="1"></td>
+              <td><input type="number" class="op-max" value="12"></td>
+              <td><input type="number" class="op-weight" value="1" min="0" step="1"></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="muted">Gewichtung: 0 = nie; 1,2,… = relative Häufigkeit.</p>
       </div>
     </div>
 
@@ -139,10 +182,9 @@
 </div>
 
 <script>
-/* ===== Konfig: Web-App-URL (von dir) ===== */
+/* ===== Server-URL (deine Apps-Script Web-App) ===== */
 const SERVER_URL = "https://script.google.com/macros/s/AKfycbx9xCriIcD_W0MkvfaEY9Jcte1JV60poZwXCCunSFzwMT1jL81HdC0kb9bKPUERy47wFw/exec";
-/* Optional: muss mit Apps-Script SHARED_SECRET übereinstimmen (oder leer lassen) */
-const SHARED_SECRET = "";
+const SHARED_SECRET = ""; // falls im Apps-Script gesetzt
 
 /* ===== Gerätekennung ===== */
 function getDeviceId() {
@@ -167,24 +209,23 @@ const hide = id => S(id).style.display = 'none';
 /* ===== State ===== */
 let cfg = {}, tasks = [], results = [], opsUsed = [];
 let idx = 0, answers = [], correctFlags = [];
-let durations = []; // Sekunden pro Aufgabe
-let tStartQ = 0;
-let timerNext = null;
+let durations = []; let tStartQ = 0; let timerNext = null;
 
-/* ===== UI: Ops toggles ===== */
+/* UI Bindings */
 document.querySelectorAll('#ops .toggle').forEach(btn=>{
   btn.addEventListener('click', ()=>btn.classList.toggle('active'));
 });
-
-/* ===== Start / Quit ===== */
-S('quit').addEventListener('click', ()=>{
-  resetAll();
-  alert('Trainer beendet.');
+S('advToggle').addEventListener('change', e=>{
+  S('advPanel').style.display = e.target.checked ? '' : 'none';
 });
 
+S('quit').addEventListener('click', ()=>{ resetAll(); alert('Trainer beendet.'); });
+
 S('start').addEventListener('click', ()=>{
-  const ops = [...document.querySelectorAll('#ops .toggle.active')].map(b=>b.dataset.op);
-  if (ops.length===0) { alert('Bitte mindestens eine Rechenart wählen.'); return; }
+  const opsBase = [...document.querySelectorAll('#ops .toggle.active')].map(b=>b.dataset.op);
+  if (opsBase.length===0) { alert('Bitte mindestens eine Rechenart wählen.'); return; }
+
+  const useAdv = S('advToggle').checked;
 
   cfg = {
     name: S('name').value.trim() || 'Unbekannt',
@@ -196,35 +237,46 @@ S('start').addEventListener('click', ()=>{
     count: Math.max(1, Math.min(500, parseInt(S('count').value,10) || 7)),
     gap: Math.max(0, parseFloat(S('gap').value) || 0.5),
     think: Math.max(0, parseFloat(S('think').value) || 0),
-    ops
+    ops: opsBase,
+    useAdv,
+    adv: {}
   };
-  if (cfg.min >= cfg.max) { alert('Minimum muss kleiner als Maximum sein.'); return; }
 
-  // Aufgaben erzeugen
+  if (useAdv) {
+    document.querySelectorAll('#advPanel tbody tr').forEach(tr=>{
+      const op = tr.dataset.op;
+      const active = tr.querySelector('.op-active').checked;
+      const min = parseInt(tr.querySelector('.op-min').value,10) || cfg.min;
+      const max = parseInt(tr.querySelector('.op-max').value,10) || cfg.max;
+      const weight = Math.max(0, parseInt(tr.querySelector('.op-weight').value,10) || 0);
+      cfg.adv[op] = {active, min, max, weight};
+    });
+    const finalOps = Object.entries(cfg.adv)
+      .filter(([op, o])=>o.active && opsBase.includes(op) && o.min < o.max && o.weight >= 0);
+    if (finalOps.length===0) { alert('Im erweiterten Modus ist kein Operator aktiv/valide.'); return; }
+  } else {
+    if (cfg.min >= cfg.max) { alert('Minimum muss kleiner als Maximum sein.'); return; }
+  }
+
   tasks = []; results = []; opsUsed = [];
   for (let i=0;i<cfg.count;i++){
-    const {q, val, op} = makeTask(cfg);
+    const {q,val,op} = makeTask(cfg);
     tasks.push(q); results.push(val); opsUsed.push(op);
   }
-  idx = 0; answers = []; correctFlags = []; durations = [];
-  hide('screen-settings'); show('screen-quiz');
-  renderQuestion();
+  idx=0; answers=[]; correctFlags=[]; durations=[];
+  hide('screen-settings'); show('screen-quiz'); renderQuestion();
 });
 
-/* ===== Question flow ===== */
+/* ===== Ablauf ===== */
 function renderQuestion(){
   if (idx >= tasks.length){ showResults(); return; }
   S('question').textContent = `Aufgabe ${idx+1} / ${cfg.count}\n\n${tasks[idx]}`;
   S('progress').textContent = '';
-  S('answer').value = '';
-  S('answer').focus();
+  S('answer').value = ''; S('answer').focus();
   tStartQ = performance.now();
 }
-
 S('ok').addEventListener('click', submitAnswer);
-S('answer').addEventListener('keydown', e=>{
-  if (e.key==='Enter') submitAnswer();
-});
+S('answer').addEventListener('keydown', e=>{ if (e.key==='Enter') submitAnswer(); });
 
 function submitAnswer(){
   if (idx >= tasks.length) return;
@@ -240,20 +292,15 @@ function submitAnswer(){
   answers.push(a);
   const correct = results[idx];
   const ok = (typeof correct === 'number' && !Number.isInteger(correct))
-              ? Math.abs(a - correct) < 1e-9
-              : a === correct;
+              ? Math.abs(a - correct) < 1e-9 : a === correct;
   correctFlags.push(!!ok);
   idx++;
 
-  if (idx >= tasks.length){
-    showResults();
-  } else {
-    clearTimeout(timerNext);
-    timerNext = setTimeout(renderQuestion, Math.max(100, cfg.gap*1000));
-  }
+  if (idx >= tasks.length){ showResults(); }
+  else { clearTimeout(timerNext); timerNext = setTimeout(renderQuestion, Math.max(100, cfg.gap*1000)); }
 }
 
-/* ===== Results ===== */
+/* ===== Ergebnisse ===== */
 function showResults(){
   hide('screen-quiz'); show('screen-results');
 
@@ -262,7 +309,6 @@ function showResults(){
   const pct = total ? (100*correct/total) : 0;
   S('summary').textContent = `${cfg.name} (${cfg.group}) – Richtig: ${correct} / ${total}  (${pct.toFixed(1)}%)`;
 
-  // Zeit-Statistik
   const avg = durations.reduce((a,b)=>a+b,0) / (durations.length||1);
   const sorted = [...durations].sort((a,b)=>a-b);
   const med = sorted.length ? (sorted.length%2 ? sorted[(sorted.length-1)/2] : (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2) : 0;
@@ -272,8 +318,7 @@ function showResults(){
     Median: <b>${med.toFixed(2)}s</b><br>
     Schnellste: <b>${fastest.toFixed(2)}s</b> – Langsamste: <b>${slowest.toFixed(2)}s</b>`;
 
-  // Fehlerschwerpunkte
-  const per = { '+':[0,0,0], '-':[0,0,0], '*':[0,0,0], '/':[0,0,0] }; // [ok, total, sumTime]
+  const per = { '+':[0,0,0], '-':[0,0,0], '*':[0,0,0], '/':[0,0,0] };
   correctFlags.forEach((ok,i)=>{ const op=opsUsed[i]; per[op][1]++; if (ok) per[op][0]++; per[op][2]+=durations[i]||0; });
 
   let hot = `<h3>Fehlerschwerpunkte</h3><ul>`;
@@ -305,7 +350,7 @@ function showResults(){
   S('details').textContent = lines.join('\n');
 }
 
-/* ===== CSV / SEND ===== */
+/* ===== Export/Senden ===== */
 S('again').addEventListener('click', ()=>{ resetAll(); });
 S('download').addEventListener('click', ()=>downloadCSV());
 S('send').addEventListener('click', ()=>sendToServer());
@@ -313,11 +358,14 @@ S('send').addEventListener('click', ()=>sendToServer());
 function dataset(){
   const now = new Date().toISOString();
   const ds = {
-    device_id: DEVICE_ID,
-    timestamp: now,
-    name: cfg.name,
-    group: cfg.group,
-    settings: {ops: cfg.ops, min: cfg.min, max: cfg.max, allow_neg: cfg.allowNeg, div_int: cfg.divInt, count: cfg.count, gap: cfg.gap, think: cfg.think},
+    device_id: DEVICE_ID, timestamp: now,
+    name: cfg.name, group: cfg.group,
+    settings: {
+      ops: cfg.ops, min: cfg.min, max: cfg.max,
+      allow_neg: cfg.allowNeg, div_int: cfg.divInt,
+      count: cfg.count, gap: cfg.gap, think: cfg.think,
+      use_adv: cfg.useAdv, adv: cfg.adv
+    },
     score: { correct: correctFlags.filter(Boolean).length, total: tasks.length,
              percent: tasks.length? (100*correctFlags.filter(Boolean).length/tasks.length):0 },
     timing: {
@@ -337,35 +385,57 @@ function downloadCSV(){
   const row = `${d.timestamp},${d.device_id},${csv(d.name)},${csv(d.group)},${d.score.correct},${d.score.total},${d.score.percent.toFixed(1)},${csv(d.settings.ops.join(''))},${d.timing.avg_s.toFixed(2)},${d.timing.median_s.toFixed(2)}\n`;
   const blob = new Blob([header, row], {type:'text/csv;charset=utf-8;'});
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'kopftrainer_stats.csv';
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  const a = document.createElement('a'); a.href = url; a.download = 'kopftrainer_stats.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 }
 const csv = s => `"${String(s).replaceAll('"','""')}"`;
 
+/* ===== NEU: CORS-sicherer Upload (text/plain) ===== */
 async function sendToServer(){
-  if (!SERVER_URL){ S('sendStatus').textContent = 'Keine SERVER_URL konfiguriert.'; return; }
-  S('sendStatus').textContent = 'Sende …';
+  const status = document.getElementById('sendStatus');
+  if (!SERVER_URL){ status.textContent = 'Keine SERVER_URL konfiguriert.'; return; }
+  status.textContent = 'Sende …';
   try{
-    const res = await fetch(SERVER_URL, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(dataset())});
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    S('sendStatus').textContent = 'Daten gesendet.';
-  }catch(err){
-    S('sendStatus').textContent = 'Senden fehlgeschlagen: ' + err.message;
+    const bodyText = JSON.stringify(dataset());
+    const res = await fetch(SERVER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // simple request -> kein Preflight
+      body: bodyText
+    });
+    let message = `HTTP ${res.status}`;
+    let ok = res.ok;
+    try {
+      const js = await res.json();           // Apps Script antwortet mit JSON {ok:true}
+      ok = ok && js.ok !== false;
+      message = js.ok ? 'Daten gesendet.' : (js.error || message);
+    } catch (_) { /* falls keine JSON-Antwort */ }
+    status.textContent = ok ? 'Daten gesendet.' : 'Fehler: ' + message;
+  } catch (err){
+    status.textContent = 'Senden fehlgeschlagen: ' + err.message;
   }
 }
 
-/* ===== Utilities ===== */
-function resetAll(){
-  clearTimeout(timerNext);
-  show('screen-settings'); hide('screen-quiz'); hide('screen-results');
-}
+function resetAll(){ clearTimeout(timerNext); show('screen-settings'); hide('screen-quiz'); hide('screen-results'); }
 
-/* ===== Aufgaben-Generator ===== */
+/* ===== Aufgaben-Generator (inkl. erweiterte Einstellungen) ===== */
 function makeTask(cfg){
-  const op = cfg.ops[Math.floor(Math.random()*cfg.ops.length)];
-  const mn = cfg.min, mx = cfg.max;
+  let op;
+  if (cfg.useAdv) {
+    const pool = [];
+    for (const o of Object.keys(cfg.adv)){
+      const a = cfg.adv[o]; if (!a || !a.active || !cfg.ops.includes(o) || a.min >= a.max) continue;
+      const w = Math.max(0, a.weight||0);
+      for (let i=0;i<w;i++) pool.push(o);
+    }
+    const cand = pool.length ? pool
+      : Object.keys(cfg.adv).filter(o=>cfg.adv[o].active && cfg.ops.includes(o) && cfg.adv[o].min < cfg.adv[o].max);
+    op = cand[Math.floor(Math.random()*cand.length)];
+  } else {
+    op = cfg.ops[Math.floor(Math.random()*cfg.ops.length)];
+  }
+
+  const range = (o)=> cfg.useAdv ? {mn: cfg.adv[o].min, mx: cfg.adv[o].max} : {mn: cfg.min, mx: cfg.max};
+  const {mn, mx} = range(op);
   const rnd = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
 
   if (op==='+'){
@@ -381,7 +451,6 @@ function makeTask(cfg){
     const a = rnd(mn,mx), b = rnd(mn,mx);
     return { q:`${a} × ${b}`, val:a*b, op:'*' };
   }
-  // Division
   if (cfg.divInt){
     let res = rnd(Math.max(1,mn), Math.max(1,mx));
     let b   = rnd(Math.max(1,mn), Math.max(1,mx));
