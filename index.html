@@ -21,6 +21,7 @@
   .buttons { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
   button { appearance:none; border:none; padding:12px 16px; border-radius:10px; font-size:16px; cursor:pointer; background:var(--accent); color:#fff; }
   button.secondary { background:#d1d1d6; color:#111; }
+  button.danger { background:var(--danger); }
   .card { background:#fff; border:1px solid #e5e5ea; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
   .big { font-weight:700; font-size:40px; text-align:center; line-height:1.25; }
   .input-inline { display:flex; gap:10px; justify-content:center; margin:14px 0 6px; }
@@ -176,13 +177,14 @@
       <button id="again" class="secondary">Zurück zu den Einstellungen</button>
       <button id="download" class="secondary">CSV herunterladen</button>
       <button id="send" class="">An Zentrale senden</button>
+      <button id="ping" class="secondary" type="button">Server-Ping</button>
     </div>
     <p class="muted" id="sendStatus"></p>
   </section>
 </div>
 
 <script>
-/* ===== Server-URL (deine Apps-Script Web-App) ===== */
+/* ===== Server-URL (Google Apps Script) ===== */
 const SERVER_URL = "https://script.google.com/macros/s/AKfycbx9xCriIcD_W0MkvfaEY9Jcte1JV60poZwXCCunSFzwMT1jL81HdC0kb9bKPUERy47wFw/exec";
 const SHARED_SECRET = ""; // falls im Apps-Script gesetzt
 
@@ -198,8 +200,6 @@ function getDeviceId() {
   }
   return id;
 }
-const DEVICE_ID = getDeviceId();
-document.getElementById('deviceId').textContent = DEVICE_ID;
 
 /* ===== DOM Helpers ===== */
 const S = id => document.getElementById(id);
@@ -211,61 +211,82 @@ let cfg = {}, tasks = [], results = [], opsUsed = [];
 let idx = 0, answers = [], correctFlags = [];
 let durations = []; let tStartQ = 0; let timerNext = null;
 
-/* UI Bindings */
-document.querySelectorAll('#ops .toggle').forEach(btn=>{
-  btn.addEventListener('click', ()=>btn.classList.toggle('active'));
+/* ===== Aufbau & Event-Bindings erst nach DOM ===== */
+document.addEventListener('DOMContentLoaded', () => {
+  const DEVICE_ID = getDeviceId();
+  S('deviceId').textContent = DEVICE_ID;
+
+  // Toggle der Grund-Rechenarten
+  document.querySelectorAll('#ops .toggle').forEach(btn=>{
+    btn.addEventListener('click', ()=>btn.classList.toggle('active'));
+  });
+  // Erweitertes Panel ein/aus
+  S('advToggle').addEventListener('change', e=>{
+    S('advPanel').style.display = e.target.checked ? '' : 'none';
+  });
+
+  // Buttons
+  S('quit').addEventListener('click', ()=>{ resetAll(); alert('Trainer beendet.'); });
+  S('start').addEventListener('click', ()=>startFlow(DEVICE_ID));
+  S('ok').addEventListener('click', submitAnswer);
+  S('answer').addEventListener('keydown', e=>{ if (e.key==='Enter') submitAnswer(); });
+  S('again').addEventListener('click', ()=>{ resetAll(); });
+  S('download').addEventListener('click', ()=>downloadCSV(DEVICE_ID));
+  S('send').addEventListener('click', ()=>sendToServer(DEVICE_ID));
+  S('ping').addEventListener('click', ()=>pingServer());
 });
-S('advToggle').addEventListener('change', e=>{
-  S('advPanel').style.display = e.target.checked ? '' : 'none';
-});
 
-S('quit').addEventListener('click', ()=>{ resetAll(); alert('Trainer beendet.'); });
+/* ===== Start-Handler ===== */
+function startFlow(DEVICE_ID){
+  try{
+    const opsBase = [...document.querySelectorAll('#ops .toggle.active')].map(b=>b.dataset.op);
+    if (opsBase.length===0) { alert('Bitte mindestens eine Rechenart wählen.'); return; }
 
-S('start').addEventListener('click', ()=>{
-  const opsBase = [...document.querySelectorAll('#ops .toggle.active')].map(b=>b.dataset.op);
-  if (opsBase.length===0) { alert('Bitte mindestens eine Rechenart wählen.'); return; }
+    const useAdv = S('advToggle').checked;
 
-  const useAdv = S('advToggle').checked;
+    cfg = {
+      name: S('name').value.trim() || 'Unbekannt',
+      group: S('group').value.trim() || '-',
+      min: parseInt(S('min').value,10) || 1,
+      max: parseInt(S('max').value,10) || 150,
+      allowNeg: S('neg').checked,
+      divInt: S('divInt').checked,
+      count: Math.max(1, Math.min(500, parseInt(S('count').value,10) || 7)),
+      gap: Math.max(0, parseFloat(S('gap').value) || 0.5),
+      think: Math.max(0, parseFloat(S('think').value) || 0),
+      ops: opsBase,
+      useAdv,
+      adv: {}
+    };
 
-  cfg = {
-    name: S('name').value.trim() || 'Unbekannt',
-    group: S('group').value.trim() || '-',
-    min: parseInt(S('min').value,10) || 1,
-    max: parseInt(S('max').value,10) || 150,
-    allowNeg: S('neg').checked,
-    divInt: S('divInt').checked,
-    count: Math.max(1, Math.min(500, parseInt(S('count').value,10) || 7)),
-    gap: Math.max(0, parseFloat(S('gap').value) || 0.5),
-    think: Math.max(0, parseFloat(S('think').value) || 0),
-    ops: opsBase,
-    useAdv,
-    adv: {}
-  };
+    if (useAdv) {
+      document.querySelectorAll('#advPanel tbody tr').forEach(tr=>{
+        const op = tr.dataset.op;
+        const active = tr.querySelector('.op-active').checked;
+        const min = parseInt(tr.querySelector('.op-min').value,10) || cfg.min;
+        const max = parseInt(tr.querySelector('.op-max').value,10) || cfg.max;
+        const weight = Math.max(0, parseInt(tr.querySelector('.op-weight').value,10) || 0);
+        cfg.adv[op] = {active, min, max, weight};
+      });
+      const finalOps = Object.entries(cfg.adv)
+        .filter(([op, o])=>o.active && opsBase.includes(op) && o.min < o.max && o.weight >= 0);
+      if (finalOps.length===0) { alert('Im erweiterten Modus ist kein Operator aktiv/valide.'); return; }
+    } else {
+      if (cfg.min >= cfg.max) { alert('Minimum muss kleiner als Maximum sein.'); return; }
+    }
 
-  if (useAdv) {
-    document.querySelectorAll('#advPanel tbody tr').forEach(tr=>{
-      const op = tr.dataset.op;
-      const active = tr.querySelector('.op-active').checked;
-      const min = parseInt(tr.querySelector('.op-min').value,10) || cfg.min;
-      const max = parseInt(tr.querySelector('.op-max').value,10) || cfg.max;
-      const weight = Math.max(0, parseInt(tr.querySelector('.op-weight').value,10) || 0);
-      cfg.adv[op] = {active, min, max, weight};
-    });
-    const finalOps = Object.entries(cfg.adv)
-      .filter(([op, o])=>o.active && opsBase.includes(op) && o.min < o.max && o.weight >= 0);
-    if (finalOps.length===0) { alert('Im erweiterten Modus ist kein Operator aktiv/valide.'); return; }
-  } else {
-    if (cfg.min >= cfg.max) { alert('Minimum muss kleiner als Maximum sein.'); return; }
+    tasks = []; results = []; opsUsed = [];
+    for (let i=0;i<cfg.count;i++){
+      const {q,val,op} = makeTask(cfg);
+      tasks.push(q); results.push(val); opsUsed.push(op);
+    }
+    idx=0; answers=[]; correctFlags=[]; durations=[];
+    hide('screen-settings'); show('screen-quiz'); renderQuestion();
+  }catch(e){
+    alert('Start fehlgeschlagen: ' + e.message);
+    console.error(e);
   }
-
-  tasks = []; results = []; opsUsed = [];
-  for (let i=0;i<cfg.count;i++){
-    const {q,val,op} = makeTask(cfg);
-    tasks.push(q); results.push(val); opsUsed.push(op);
-  }
-  idx=0; answers=[]; correctFlags=[]; durations=[];
-  hide('screen-settings'); show('screen-quiz'); renderQuestion();
-});
+}
 
 /* ===== Ablauf ===== */
 function renderQuestion(){
@@ -275,8 +296,6 @@ function renderQuestion(){
   S('answer').value = ''; S('answer').focus();
   tStartQ = performance.now();
 }
-S('ok').addEventListener('click', submitAnswer);
-S('answer').addEventListener('keydown', e=>{ if (e.key==='Enter') submitAnswer(); });
 
 function submitAnswer(){
   if (idx >= tasks.length) return;
@@ -350,12 +369,8 @@ function showResults(){
   S('details').textContent = lines.join('\n');
 }
 
-/* ===== Export/Senden ===== */
-S('again').addEventListener('click', ()=>{ resetAll(); });
-S('download').addEventListener('click', ()=>downloadCSV());
-S('send').addEventListener('click', ()=>sendToServer());
-
-function dataset(){
+/* ===== Dataset / CSV ===== */
+function dataset(DEVICE_ID){
   const now = new Date().toISOString();
   const ds = {
     device_id: DEVICE_ID, timestamp: now,
@@ -379,8 +394,8 @@ function dataset(){
   return ds;
 }
 
-function downloadCSV(){
-  const d = dataset();
+function downloadCSV(DEVICE_ID){
+  const d = dataset(DEVICE_ID);
   const header = 'timestamp,device_id,name,group,correct,total,percent,ops,avg_time_s,median_time_s\n';
   const row = `${d.timestamp},${d.device_id},${csv(d.name)},${csv(d.group)},${d.score.correct},${d.score.total},${d.score.percent.toFixed(1)},${csv(d.settings.ops.join(''))},${d.timing.avg_s.toFixed(2)},${d.timing.median_s.toFixed(2)}\n`;
   const blob = new Blob([header, row], {type:'text/csv;charset=utf-8;'});
@@ -390,56 +405,35 @@ function downloadCSV(){
 }
 const csv = s => `"${String(s).replaceAll('"','""')}"`;
 
-/* ===== NEU: CORS-sicherer Upload (text/plain) ===== */
-async function sendToServer(){
-<script>
-async function sendToServer(){
-  const status = document.getElementById('sendStatus');
+/* ===== Upload: robust (text/plain + Fallback no-cors) ===== */
+async function sendToServer(DEVICE_ID){
+  const status = S('sendStatus');
+  if (!SERVER_URL){ status.textContent = 'Keine SERVER_URL konfiguriert.'; return; }
   status.textContent = 'Sende …';
-
-  const payload = JSON.stringify(dataset());
-  const url = SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 't=' + Date.now(); // cache-bust
-
-  try {
-    // 1) Primärer Versuch: text/plain (simple request, keine Preflight-CORS)
+  const url = SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+  const payload = JSON.stringify(dataset(DEVICE_ID));
+  try{
+    // 1) Simple request (kein Preflight)
     let res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: payload
     });
-
-    // Versuche JSON zu lesen (Apps Script antwortet i. d. R. mit {ok:true})
-    let ok = res.ok;
-    let msg = `HTTP ${res.status}`;
-    try {
-      const js = await res.json();
-      ok = ok && js.ok !== false;
-      msg = js.ok ? 'Daten gesendet.' : (js.error || msg);
-    } catch (_) { /* keine JSON-Antwort – ignorieren */ }
-
-    if (ok) {
-      status.textContent = 'Daten gesendet.';
-      return;
-    }
-
-    // 2) Fallback (no-cors): Browser zeigt keinen Status – Server erhält die Daten trotzdem
+    let ok = res.ok, msg = `HTTP ${res.status}`;
+    try { const js = await res.json(); ok = ok && js.ok !== false; msg = js.ok ? 'Daten gesendet.' : (js.error || msg); } catch(_){}
+    if (ok){ status.textContent = 'Daten gesendet.'; return; }
+    // 2) Fallback (no-cors)
     status.textContent = 'Sende im Fallback-Modus …';
-    await fetch(url, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: payload
-    });
-    // Wir können keine Antwort prüfen; sag dem Nutzer, er solle im Sheet nachsehen.
+    await fetch(url, { method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: payload });
     status.textContent = 'Senden beauftragt (Fallback). Prüfe das Sheet.';
-  } catch (err) {
+  } catch (err){
     status.textContent = 'Senden fehlgeschlagen: ' + err.message;
   }
 }
 
-/* Kleiner Ping-Test, ob deine Web-App überhaupt erreichbar ist (GET) */
+/* ===== Ping (GET) ===== */
 async function pingServer(){
-  const status = document.getElementById('sendStatus');
+  const status = S('sendStatus');
   try{
     const res = await fetch(SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 'ping=1');
     status.textContent = res.ok ? 'Ping OK (Server erreichbar).' : `Ping HTTP ${res.status}`;
@@ -447,13 +441,13 @@ async function pingServer(){
     status.textContent = 'Ping fehlgeschlagen: ' + e.message;
   }
 }
-  }
-}
 
+/* ===== Reset ===== */
 function resetAll(){ clearTimeout(timerNext); show('screen-settings'); hide('screen-quiz'); hide('screen-results'); }
 
-/* ===== Aufgaben-Generator (inkl. erweiterte Einstellungen) ===== */
+/* ===== Aufgaben-Generator ===== */
 function makeTask(cfg){
+  // Operator wählen (ggf. gewichtet)
   let op;
   if (cfg.useAdv) {
     const pool = [];
@@ -486,6 +480,7 @@ function makeTask(cfg){
     const a = rnd(mn,mx), b = rnd(mn,mx);
     return { q:`${a} × ${b}`, val:a*b, op:'*' };
   }
+  // Division
   if (cfg.divInt){
     let res = rnd(Math.max(1,mn), Math.max(1,mx));
     let b   = rnd(Math.max(1,mn), Math.max(1,mx));
@@ -501,16 +496,3 @@ function makeTask(cfg){
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
-
