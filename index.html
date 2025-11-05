@@ -392,26 +392,61 @@ const csv = s => `"${String(s).replaceAll('"','""')}"`;
 
 /* ===== NEU: CORS-sicherer Upload (text/plain) ===== */
 async function sendToServer(){
+<script>
+async function sendToServer(){
   const status = document.getElementById('sendStatus');
-  if (!SERVER_URL){ status.textContent = 'Keine SERVER_URL konfiguriert.'; return; }
   status.textContent = 'Sende …';
-  try{
-    const bodyText = JSON.stringify(dataset());
-    const res = await fetch(SERVER_URL, {
+
+  const payload = JSON.stringify(dataset());
+  const url = SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 't=' + Date.now(); // cache-bust
+
+  try {
+    // 1) Primärer Versuch: text/plain (simple request, keine Preflight-CORS)
+    let res = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // simple request -> kein Preflight
-      body: bodyText
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: payload
     });
-    let message = `HTTP ${res.status}`;
+
+    // Versuche JSON zu lesen (Apps Script antwortet i. d. R. mit {ok:true})
     let ok = res.ok;
+    let msg = `HTTP ${res.status}`;
     try {
-      const js = await res.json();           // Apps Script antwortet mit JSON {ok:true}
+      const js = await res.json();
       ok = ok && js.ok !== false;
-      message = js.ok ? 'Daten gesendet.' : (js.error || message);
-    } catch (_) { /* falls keine JSON-Antwort */ }
-    status.textContent = ok ? 'Daten gesendet.' : 'Fehler: ' + message;
-  } catch (err){
+      msg = js.ok ? 'Daten gesendet.' : (js.error || msg);
+    } catch (_) { /* keine JSON-Antwort – ignorieren */ }
+
+    if (ok) {
+      status.textContent = 'Daten gesendet.';
+      return;
+    }
+
+    // 2) Fallback (no-cors): Browser zeigt keinen Status – Server erhält die Daten trotzdem
+    status.textContent = 'Sende im Fallback-Modus …';
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: payload
+    });
+    // Wir können keine Antwort prüfen; sag dem Nutzer, er solle im Sheet nachsehen.
+    status.textContent = 'Senden beauftragt (Fallback). Prüfe das Sheet.';
+  } catch (err) {
     status.textContent = 'Senden fehlgeschlagen: ' + err.message;
+  }
+}
+
+/* Kleiner Ping-Test, ob deine Web-App überhaupt erreichbar ist (GET) */
+async function pingServer(){
+  const status = document.getElementById('sendStatus');
+  try{
+    const res = await fetch(SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 'ping=1');
+    status.textContent = res.ok ? 'Ping OK (Server erreichbar).' : `Ping HTTP ${res.status}`;
+  }catch(e){
+    status.textContent = 'Ping fehlgeschlagen: ' + e.message;
+  }
+}
   }
 }
 
