@@ -1,0 +1,226 @@
+/***********************
+ *   KONFIGURATION
+ ***********************/
+const SHEET_SUMMARY = 'Summary';
+const SHEET_ITEMS   = 'Items';
+
+// Admin-Passwort für das ÄNDERN der zentralen Konfiguration:
+const ADMIN_KEY = 'Bitte_ändern_zu_deinem_Admin_Passwort';
+
+// Key unter dem wir die zentrale Konfiguration persistent speichern:
+const CONFIG_PROPERTY_KEY = 'kopftrainer_config_v1';
+
+/***********************
+ *   HILFSFUNKTIONEN
+ ***********************/
+function getBook() {
+  // Wenn das Skript im Sheet angelegt ist:
+  return SpreadsheetApp.getActive();
+}
+function getOrCreateSheet(book, name) {
+  return book.getSheetByName(name) || book.insertSheet(name);
+}
+
+function ensureHeaderWithRunId(sh, baseHeaders) {
+  // Falls leer: setze Basis-Header
+  if (sh.getLastRow() === 0) {
+    sh.appendRow(baseHeaders);
+  } else {
+    const lastCol = sh.getLastColumn();
+    const header = sh.getRange(1,1,1,lastCol).getValues()[0].map(String);
+    if (!header.includes('run_id')) {
+      // Hänge run_id als neue letzte Spalte an (ohne Datenverlust)
+      sh.getRange(1, lastCol+1).setValue('run_id');
+    }
+  }
+  return getHeaderMap(sh);
+}
+
+function getHeaderMap(sh) {
+  const header = sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
+  const map = {};
+  header.forEach((name, i)=> { if (name) map[name] = i+1; }); // 1-based
+  return map;
+}
+
+function json(obj, status) {
+  const out = ContentService.createTextOutput(JSON.stringify(obj));
+  out.setMimeType(ContentService.MimeType.JSON);
+  if (status) out.setHeader('X-Status-Code', String(status));
+  return out;
+}
+
+/***********************
+ *   DEFAULT-KONFIG (falls noch nichts gespeichert)
+ ***********************/
+function defaultConfig() {
+  return {
+    ops: ['+','-','*','/'],
+    useAdv: true,
+    adv: {
+      '+': {active:true,  min:10, max:150, weight:1},
+      '-': {active:true,  min:10, max:150, weight:1},
+      '*': {active:true,  min:1,  max:12,  weight:1},
+      '/': {active:true,  min:1,  max:12,  weight:1}
+    },
+    allowNeg: false,
+    divInt: true,
+    count: 12,
+    gap: 0.3
+  };
+}
+
+/***********************
+ *   CONFIG STORAGE (PropertiesService)
+ ***********************/
+function readConfig() {
+  const s = PropertiesService.getScriptProperties().getProperty(CONFIG_PROPERTY_KEY);
+  if (!s) return defaultConfig();
+  try { return JSON.parse(s); } catch(_) { return defaultConfig(); }
+}
+function writeConfig(cfg) {
+  PropertiesService.getScriptProperties().setProperty(CONFIG_PROPERTY_KEY, JSON.stringify(cfg));
+}
+
+/***********************
+ *   HTTP HANDLER
+ ***********************/
+function doGet(e) {
+  // Ping / Simple Status
+  if (e && e.parameter && e.parameter.ping) {
+    return ContentService.createTextOutput('OK').setMimeType(ContentService.MimeType.TEXT);
+  }
+  // Konfiguration ausgeben (lesen ist öffentlich)
+  if (e && e.parameter && e.parameter.action === 'config') {
+    return json({ ok: true, config: readConfig() });
+  }
+  return ContentService
+    .createTextOutput('Kopfrechnen Webhook. POST Ergebnisse als JSON/Text. GET ?action=config für Konfiguration.')
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+function doPost(e) {
+  try {
+    if (!e || !e.postData || !e.postData.contents) {
+      return json({ ok:false, error:'No body' }, 400);
+    }
+    const data = JSON.parse(e.postData.contents);
+
+    // 1) Admin: Konfiguration setzen
+    if (data && data.type === 'config') {
+      if (!data.admin_key || data.admin_key !== ADMIN_KEY) {
+        return json({ ok:false, error:'Unauthorized' }, 401);
+      }
+      if (!data.config) {
+        return json({ ok:false, error:'No config provided' }, 400);
+      }
+      writeConfig(data.config);
+      return json({ ok:true, saved:true });
+    }
+
+    // 2) Ergebnisse: vorbereiten
+    const s = data;
+    const book = getBook();
+    const shSummary = getOrCreateSheet(book, SHEET_SUMMARY);
+    const shItems   = getOrCreateSheet(book, SHEET_ITEMS);
+
+    // Header sicherstellen (fügt run_id an, falls fehlt)
+    const summaryHeader = ensureHeaderWithRunId(shSummary, [
+      'timestamp','device_id','name','group',
+      'correct','total','percent',
+      'ops','min','max','allow_neg','div_int','count','gap','think',
+      'avg_time_s','median_time_s','run_id'
+    ]);
+    const itemsHeader = ensureHeaderWithRunId(shItems, [
+      'timestamp','device_id','name','group',
+      'index','question','op','answer','correct','is_correct','time_s','run_id'
+    ]);
+
+    const runId = String(s.run_id || '');
+    // 2a) Dedupe: Cache + Sheet
+    if (runId) {
+      const cache = CacheService.getScriptCache();
+      const key = 'run:'+runId;
+      if (cache.get(key)) {
+        return json({ ok:true, dedup:true, source:'cache' });
+      }
+      // Suche gezielt in run_id-Spalte, falls vorhanden
+      let exists = false;
+      const col = summaryHeader['run_id'];
+      if (col) {
+        const lastRow = shSummary.getLastRow();
+        if (lastRow > 1) {
+          const vals = shSummary.getRange(2, col, lastRow-1, 1).getValues().flat().map(String);
+          exists = vals.indexOf(runId) !== -1;
+        }
+      } else {
+        // Fallback: Volltext (langsamer, nur falls Header fehlt)
+        exists = !!shSummary.createTextFinder(runId).useRegularExpression(false).findNext();
+      }
+      if (exists) {
+        cache.put(key, '1', 3600); // 1 Stunde
+        return json({ ok:true, dedup:true, source:'sheet' });
+      }
+      // Reserviere im Cache (schützt gegen Rennbedingungen)
+      cache.put(key, '1', 300); // 5 Minuten
+    }
+
+    // 3) Zeilen auf Basis der vorhandenen Header schreiben
+    const score   = s.score   || {};
+    const timing  = s.timing  || {};
+    const setg    = s.settings|| {};
+
+    // Helper: baue Array in der Reihenfolge der Header
+    const makeRow = (headerMap) => {
+      const row = new Array(Object.keys(headerMap).length).fill('');
+      function set(name, val) { if (headerMap[name]) row[headerMap[name]-1] = val; }
+      set('timestamp',  s.timestamp || new Date());
+      set('run_id',     runId || '');
+      set('device_id',  s.device_id || '');
+      set('name',       s.name || '');
+      set('group',      s.group || '');
+      set('correct',    score.correct || 0);
+      set('total',      score.total || 0);
+      set('percent',    score.percent || 0);
+      set('ops',        (setg.ops || []).join(''));
+      set('min',        setg.min ?? '');
+      set('max',        setg.max ?? '');
+      set('allow_neg',  setg.allow_neg ?? '');
+      set('div_int',    setg.div_int ?? '');
+      set('count',      setg.count ?? '');
+      set('gap',        setg.gap ?? '');
+      set('think',      setg.think ?? '');
+      set('avg_time_s',    timing.avg_s ?? '');
+      set('median_time_s', timing.median_s ?? '');
+      return row;
+    };
+
+    const sumRow = makeRow(summaryHeader);
+    shSummary.appendRow(sumRow);
+
+    const items = (s.items || []).map((it, i) => {
+      const row = new Array(Object.keys(itemsHeader).length).fill('');
+      function setI(name, val) { if (itemsHeader[name]) row[itemsHeader[name]-1] = val; }
+      setI('timestamp',  s.timestamp || new Date());
+      setI('run_id',     runId || '');
+      setI('device_id',  s.device_id || '');
+      setI('name',       s.name || '');
+      setI('group',      s.group || '');
+      setI('index',      i + 1);
+      setI('question',   it.q || '');
+      setI('op',         it.op || '');
+      setI('answer',     it.answer ?? '');
+      setI('correct',    it.correct ?? '');
+      setI('is_correct', it.is_correct ? 1 : 0);
+      setI('time_s',     it.time_s ?? '');
+      return row;
+    });
+    if (items.length) {
+      shItems.getRange(shItems.getLastRow()+1, 1, items.length, items[0].length).setValues(items);
+    }
+
+    return json({ ok:true, saved:true });
+  } catch (err) {
+    return json({ ok:false, error:String(err) }, 500);
+  }
+}
