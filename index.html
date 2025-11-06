@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Kopfrechnen Trainer (Admin-gesichert, Fixes)</title>
+<title>Kopfrechnen Trainer (Admin-gesichert, One-Send Fix)</title>
 <style>
   :root { --accent:#0a84ff; --muted:#f2f2f7; --danger:#ff3b30; --ok:#34c759; }
   html,body { margin:0; height:100%; font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:#fff; color:#111; }
@@ -18,6 +18,7 @@
   .buttons { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
   button { appearance:none; border:none; padding:12px 16px; border-radius:10px; font-size:16px; cursor:pointer; background:var(--accent); color:#fff; }
   button.secondary { background:#d1d1d6; color:#111; }
+  button[disabled] { opacity:.55; cursor:not-allowed; }
   .card { background:#fff; border:1px solid #e5e5ea; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
   .task-index { text-align:center; font-size:18px; color:#444; margin-top:6px; }
   .task-text { font-weight:700; font-size:44px; text-align:center; line-height:1.25; margin-top:8px; }
@@ -30,8 +31,6 @@
   hr { border:none; border-top:1px solid #eee; margin:16px 0; }
   .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
   @media (max-width:700px){ .grid { grid-template-columns: 1fr; } }
-
-  /* Admin-Modal */
   .modal { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; padding:16px; }
   .modal .panel { background:#fff; max-width:900px; width:100%; border-radius:14px; padding:16px; }
   table { border-collapse: collapse; width:100%; }
@@ -152,10 +151,10 @@
 </div>
 
 <script>
-/* ===== Server-URL (Google Apps Script) ===== */
+/* ===== Server-URL ===== */
 const SERVER_URL = "https://script.google.com/macros/s/AKfycbx9xCriIcD_W0MkvfaEY9Jcte1JV60poZwXCCunSFzwMT1jL81HdC0kb9bKPUERy47wFw/exec";
 
-/* ===== Gerätekennung ===== */
+/* ===== Helpers ===== */
 function getDeviceId() {
   const key = 'kopftrainer_device_id';
   let id = localStorage.getItem(key);
@@ -167,26 +166,25 @@ function getDeviceId() {
   }
   return id;
 }
-
-/* ===== DOM Helpers ===== */
 const S = id => document.getElementById(id);
 const show = id => S(id).style.display = '';
 const hide = id => S(id).style.display = 'none';
 
 /* ===== State ===== */
-let serverConfig = null; // zentrale Konfiguration
+let serverConfig = null;
 let cfg = {}, tasks = [], results = [], opsUsed = [];
 let idx = 0, answers = [], correctFlags = [];
 let durations = []; let tStartQ = 0; let timerNext = null;
-let state = 'await';        // 'await' | 'transition'  (Debounce gegen Überspringen)
-let sentOnce = false;       // Upload nur einmal erlauben
+let state = 'await';         // 'await' | 'transition'
+let runId = null;            // eindeutige ID je Durchlauf
+let isSending = false;       // schützt vor Race-Conditions
+let sentOnce = false;        // „einmal gesendet“ pro runId
 
-/* ===== Setup nach DOM ===== */
+/* ===== Setup ===== */
 document.addEventListener('DOMContentLoaded', async () => {
   const DEVICE_ID = getDeviceId();
   S('deviceId').textContent = DEVICE_ID;
 
-  // UI Events
   S('start').addEventListener('click', ()=>startFlow(DEVICE_ID));
   S('ok').addEventListener('click', ()=>trySubmit());
   S('answer').addEventListener('keydown', e=>{ if (e.key==='Enter') trySubmit(); });
@@ -195,7 +193,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   S('send').addEventListener('click', ()=>sendToServerOnce(DEVICE_ID));
   S('ping').addEventListener('click', ()=>pingServer());
 
-  // Admin: Long-Press auf Titel (3s)
+  // Admin: Long-Press
   let pressTimer=null;
   const title = S('title');
   title.addEventListener('mousedown', () => pressTimer = setTimeout(openAdmin, 3000));
@@ -205,11 +203,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   S('saveCfg').addEventListener('click', saveAdminConfig);
   S('cancelCfg').addEventListener('click', closeAdmin);
 
-  // Konfiguration vom Server
   await loadServerConfig();
 });
 
-/* ===== Server-Konfig laden ===== */
+/* ===== Config laden ===== */
 async function loadServerConfig(){
   S('cfgHint').textContent = 'Lade zentrale Einstellungen …';
   try{
@@ -225,7 +222,7 @@ async function loadServerConfig(){
   }
 }
 
-/* ===== Start mit zentraler Konfig ===== */
+/* ===== Start ===== */
 function startFlow(DEVICE_ID){
   const base = serverConfig || {
     ops:['+','-','*','/'], useAdv:true,
@@ -237,11 +234,14 @@ function startFlow(DEVICE_ID){
     group: (S('group').value.trim() || '-'),
     ...JSON.parse(JSON.stringify(base))
   };
-  // reset states
+
+  // neue runId & Send-Status zurücksetzen
+  runId = `run_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  isSending = false;
   sentOnce = false;
   setSendButtonEnabled(true);
 
-  // Aufgaben erzeugen
+  // Aufgaben
   tasks = []; results = []; opsUsed = [];
   for (let i=0;i<cfg.count;i++){
     const {q,val,op} = makeTask(cfg);
@@ -251,10 +251,9 @@ function startFlow(DEVICE_ID){
   hide('screen-start'); show('screen-quiz'); renderQuestion();
 }
 
-/* ===== Ablauf ===== */
+/* ===== Fragenfluss ===== */
 function renderQuestion(){
   if (idx >= tasks.length){ showResults(); return; }
-  // Anzeige getrennt: Index und Aufgabe
   S('taskIndex').textContent = `Aufgabe ${idx+1} / ${cfg.count}`;
   S('taskText').textContent = tasks[idx];
 
@@ -265,23 +264,19 @@ function renderQuestion(){
   S('answer').focus();
   tStartQ = performance.now();
 }
-
 function trySubmit(){
-  if (state !== 'await') return;   // Debounce: nur im Wartezustand zulassen
+  if (state !== 'await') return;   // Debounce
   setInputEnabled(false);
   submitAnswer();
 }
-
 function setInputEnabled(enabled){
   S('answer').disabled = !enabled;
   S('ok').disabled = !enabled;
 }
-
 function submitAnswer(){
   if (idx >= tasks.length) return;
 
-  const tEnd = performance.now();
-  const dtSec = Math.max(0, (tEnd - tStartQ)/1000);
+  const dtSec = Math.max(0, (performance.now() - tStartQ)/1000);
   durations.push(dtSec);
 
   let t = (S('answer').value||'').trim().replace(',', '.');
@@ -311,9 +306,7 @@ function submitAnswer(){
   if (idx >= tasks.length){
     showResults();
   } else {
-    // Übergangsphase: kein Doppelklick möglich
     state = 'transition';
-    // kleine Pause (cfg.gap), dann nächste Aufgabe rendern
     clearTimeout(timerNext);
     timerNext = setTimeout(renderQuestion, Math.max(80, (cfg.gap||0)*1000));
   }
@@ -337,7 +330,6 @@ function showResults(){
     Median: <b>${med.toFixed(2)}s</b><br>
     Schnellste: <b>${fastest.toFixed(2)}s</b> – Langsamste: <b>${slowest.toFixed(2)}s</b>`;
 
-  // Fehlerschwerpunkte
   const per = { '+':[0,0,0], '-':[0,0,0], '*':[0,0,0], '/':[0,0,0] };
   correctFlags.forEach((ok,i)=>{ const op=opsUsed[i]; per[op][1]++; if (ok) per[op][0]++; per[op][2]+=durations[i]||0; });
 
@@ -368,12 +360,18 @@ function showResults(){
     lines.push(`${i+1}. ${q}  =  ${results[i]}   | deine Antwort: ${answers[i]}   ${m}   (${opsUsed[i]}, ${durations[i].toFixed(2)}s)`);
   });
   S('details').textContent = lines.join('\n');
+
+  // Falls dieser run bereits gesendet wurde (durch Reload etc.) → Button gesperrt
+  if (localStorage.getItem('sent_'+runId) === '1'){
+    setSendButtonEnabled(false);
+  }
 }
 
 /* ===== Dataset / CSV ===== */
 function dataset(DEVICE_ID){
   const now = new Date().toISOString();
   return {
+    run_id: runId,
     device_id: DEVICE_ID, timestamp: now,
     name: cfg.name, group: cfg.group,
     settings: {
@@ -401,17 +399,27 @@ function downloadCSV(DEVICE_ID){
 }
 const csv = s => `"${String(s).replaceAll('"','""')}"`;
 
-/* ===== Upload: einmalig ===== */
+/* ===== Einmaliger Upload (mit harter Sperre + Persistenz) ===== */
 function setSendButtonEnabled(enabled){
   const b = S('send');
   b.disabled = !enabled;
   b.textContent = enabled ? 'An Zentrale senden' : 'Bereits gesendet';
 }
 async function sendToServerOnce(DEVICE_ID){
-  if (sentOnce){ return; }       // harte Sperre
+  if (!runId){ return; }
+  // Persistenz-Check
+  if (localStorage.getItem('sent_'+runId) === '1'){ setSendButtonEnabled(false); return; }
+  if (sentOnce || isSending){ return; }      // weiche + harte Guard
   sentOnce = true;
+  isSending = true;
   setSendButtonEnabled(false);
-  await sendToServer(DEVICE_ID); // Upload durchführen
+  try{
+    await sendToServer(DEVICE_ID);
+    // Egal ob ok/Fehler – als „gesendet“ markieren, damit kein Spam
+    localStorage.setItem('sent_'+runId, '1');
+  } finally {
+    isSending = false;
+  }
 }
 async function sendToServer(DEVICE_ID){
   const status = S('sendStatus');
@@ -426,7 +434,7 @@ async function sendToServer(DEVICE_ID){
   }catch(e){ status.textContent = 'Senden fehlgeschlagen: ' + e.message; }
 }
 
-/* ===== Ping (GET) ===== */
+/* ===== Ping ===== */
 async function pingServer(){
   const el = S('cfgHint');
   try{
@@ -477,7 +485,7 @@ function makeTask(cfg){
   }
 }
 
-/* ===== Admin-Modal ===== */
+/* ===== Admin ===== */
 function openAdmin(){
   const c = serverConfig || {
     ops:['+','-','*','/'], useAdv:true,
@@ -508,7 +516,6 @@ function openAdmin(){
   S('adminModal').style.display = 'flex';
 }
 function closeAdmin(){ S('adminModal').style.display = 'none'; }
-
 async function saveAdminConfig(){
   const ops = [];
   if (S('opPlus').checked)  ops.push('+');
