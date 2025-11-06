@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Kopfrechnen Trainer (Admin-gesichert, Fixes)</title>
+<style>
+  :root { --accent:#0a84ff; --muted:#f2f2f7; --danger:#ff3b30; --ok:#34c759; }
+  html,body { margin:0; height:100%; font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:#fff; color:#111; }
+  .wrap { max-width:900px; margin:0 auto; padding:16px; }
+  h1 { font-size:28px; margin:12px 0 4px; user-select:none; }
+  h2 { font-size:22px; margin:20px 0 8px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+  label { display:block; font-size:14px; color:#333; margin-bottom:6px; }
+  input[type="text"], input[type="number"], input[type="password"] { width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid #ccc; border-radius:8px; font-size:16px; background:#fff; }
+  input[type="checkbox"] { transform:scale(1.2); }
+  .col { flex:1 1 200px; min-width:200px; }
+  .buttons { display:flex; gap:12px; flex-wrap:wrap; margin-top:14px; }
+  button { appearance:none; border:none; padding:12px 16px; border-radius:10px; font-size:16px; cursor:pointer; background:var(--accent); color:#fff; }
+  button.secondary { background:#d1d1d6; color:#111; }
+  .card { background:#fff; border:1px solid #e5e5ea; border-radius:14px; padding:16px; box-shadow:0 1px 2px rgba(0,0,0,.05); }
+  .task-index { text-align:center; font-size:18px; color:#444; margin-top:6px; }
+  .task-text { font-weight:700; font-size:44px; text-align:center; line-height:1.25; margin-top:8px; }
+  .input-inline { display:flex; gap:10px; justify-content:center; margin:14px 0 6px; }
+  .input-inline input { max-width:220px; text-align:center; font-size:20px; }
+  .muted { color:#777; font-size:14px; }
+  .results pre { white-space:pre-wrap; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:16px; }
+  .ok { color:var(--ok); font-weight:600; }
+  .bad { color:var(--danger); font-weight:600; }
+  hr { border:none; border-top:1px solid #eee; margin:16px 0; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+  @media (max-width:700px){ .grid { grid-template-columns: 1fr; } }
+
+  /* Admin-Modal */
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.35); display:none; align-items:center; justify-content:center; padding:16px; }
+  .modal .panel { background:#fff; max-width:900px; width:100%; border-radius:14px; padding:16px; }
+  table { border-collapse: collapse; width:100%; }
+  th, td { border-bottom:1px solid #eee; padding:8px; text-align:center; }
+  th { font-weight:600; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">🧮 Kopfrechnen Trainer</h1>
+
+  <!-- START -->
+  <section id="screen-start" class="card">
+    <h2>Start</h2>
+    <div class="row">
+      <div class="col">
+        <label for="name">Name</label>
+        <input id="name" type="text" placeholder="Vor- und Nachname">
+      </div>
+      <div class="col">
+        <label for="group">Klasse/Gruppe</label>
+        <input id="group" type="text" placeholder="z. B. 5b">
+      </div>
+    </div>
+
+    <div class="muted" id="cfgHint">Lade zentrale Einstellungen …</div>
+
+    <div class="buttons">
+      <button id="start">Start</button>
+      <button id="ping" class="secondary" type="button">Server-Ping</button>
+    </div>
+    <p class="muted">Geräte-ID: <span id="deviceId"></span></p>
+  </section>
+
+  <!-- QUIZ -->
+  <section id="screen-quiz" class="card" style="display:none">
+    <div id="taskIndex" class="task-index">Aufgabe – / –</div>
+    <div id="taskText" class="task-text">–</div>
+    <div class="input-inline">
+      <input id="answer" type="text" inputmode="decimal" placeholder="Antwort eingeben">
+      <button id="ok">OK</button>
+    </div>
+    <p class="muted" id="progress"></p>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="screen-results" class="card" style="display:none">
+    <h2>Auswertung</h2>
+    <div class="grid">
+      <div><div id="summary" class="task-text" style="font-size:28px"></div></div>
+      <div>
+        <div class="card" style="border:none; box-shadow:none; padding:0">
+          <div><b>Zeit-Statistik</b></div>
+          <div id="timingStats" class="muted"></div>
+        </div>
+      </div>
+    </div>
+    <hr>
+    <div id="hotspots"></div>
+    <hr>
+    <div class="results"><pre id="details"></pre></div>
+    <div class="buttons">
+      <button id="again" class="secondary">Neuer Durchlauf</button>
+      <button id="download" class="secondary">CSV herunterladen</button>
+      <button id="send" class="">An Zentrale senden</button>
+    </div>
+    <p class="muted" id="sendStatus"></p>
+  </section>
+</div>
+
+<!-- ADMIN MODAL -->
+<div id="adminModal" class="modal">
+  <div class="panel">
+    <h3>Zentrale Einstellungen (Admin)</h3>
+    <div class="muted" style="margin-bottom:8px">Änderungen wirken nach „Speichern“ sofort.</div>
+
+    <div class="row">
+      <div class="col">
+        <label>Rechenarten</label>
+        <label><input type="checkbox" id="opPlus"> Plus (+)</label><br>
+        <label><input type="checkbox" id="opMinus"> Minus (−)</label><br>
+        <label><input type="checkbox" id="opMul"> Mal (×)</label><br>
+        <label><input type="checkbox" id="opDiv"> Geteilt (÷)</label>
+      </div>
+      <div class="col">
+        <label>Regeln</label>
+        <label><input type="checkbox" id="allowNeg"> Negative Ergebnisse erlauben</label><br>
+        <label><input type="checkbox" id="divInt"> Division ganzzahlig</label><br>
+        <label>Anzahl Aufgaben <input type="number" id="count" value="12" min="1" max="500"></label><br>
+        <label>Abstand (s) <input type="number" id="gap" value="0.3" step="0.1" min="0"></label>
+      </div>
+    </div>
+
+    <h4>Bereiche & Gewichtung je Operator</h4>
+    <table>
+      <thead><tr><th>Op</th><th>Aktiv</th><th>Min</th><th>Max</th><th>Gewicht</th></tr></thead>
+      <tbody>
+        <tr data-op="+"><td>+</td><td><input type="checkbox" class="a"></td><td><input type="number" class="mn"></td><td><input type="number" class="mx"></td><td><input type="number" class="w" min="0"></td></tr>
+        <tr data-op="-"><td>−</td><td><input type="checkbox" class="a"></td><td><input type="number" class="mn"></td><td><input type="number" class="mx"></td><td><input type="number" class="w" min="0"></td></tr>
+        <tr data-op="*"><td>×</td><td><input type="checkbox" class="a"></td><td><input type="number" class="mn"></td><td><input type="number" class="mx"></td><td><input type="number" class="w" min="0"></td></tr>
+        <tr data-op="/"><td>÷</td><td><input type="checkbox" class="a"></td><td><input type="number" class="mn"></td><td><input type="number" class="mx"></td><td><input type="number" class="w" min="0"></td></tr>
+      </tbody>
+    </table>
+
+    <div class="row" style="margin-top:10px">
+      <div class="col">
+        <label>Admin-Passwort (nur zum Speichern)</label>
+        <input type="password" id="adminKey" placeholder="Admin-Passwort">
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="saveCfg">Speichern</button>
+      <button id="cancelCfg" class="secondary">Schließen</button>
+    </div>
+    <div class="muted" id="adminStatus" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+/* ===== Server-URL (Google Apps Script) ===== */
+const SERVER_URL = "https://script.google.com/macros/s/AKfycbx9xCriIcD_W0MkvfaEY9Jcte1JV60poZwXCCunSFzwMT1jL81HdC0kb9bKPUERy47wFw/exec";
+
+/* ===== Gerätekennung ===== */
+function getDeviceId() {
+  const key = 'kopftrainer_device_id';
+  let id = localStorage.getItem(key);
+  if (!id) {
+    id = ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g, c =>
+      (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+    );
+    localStorage.setItem(key, id);
+  }
+  return id;
+}
+
+/* ===== DOM Helpers ===== */
+const S = id => document.getElementById(id);
+const show = id => S(id).style.display = '';
+const hide = id => S(id).style.display = 'none';
+
+/* ===== State ===== */
+let serverConfig = null; // zentrale Konfiguration
+let cfg = {}, tasks = [], results = [], opsUsed = [];
+let idx = 0, answers = [], correctFlags = [];
+let durations = []; let tStartQ = 0; let timerNext = null;
+let state = 'await';        // 'await' | 'transition'  (Debounce gegen Überspringen)
+let sentOnce = false;       // Upload nur einmal erlauben
+
+/* ===== Setup nach DOM ===== */
+document.addEventListener('DOMContentLoaded', async () => {
+  const DEVICE_ID = getDeviceId();
+  S('deviceId').textContent = DEVICE_ID;
+
+  // UI Events
+  S('start').addEventListener('click', ()=>startFlow(DEVICE_ID));
+  S('ok').addEventListener('click', ()=>trySubmit());
+  S('answer').addEventListener('keydown', e=>{ if (e.key==='Enter') trySubmit(); });
+  S('again').addEventListener('click', ()=>{ resetAll(); });
+  S('download').addEventListener('click', ()=>downloadCSV(DEVICE_ID));
+  S('send').addEventListener('click', ()=>sendToServerOnce(DEVICE_ID));
+  S('ping').addEventListener('click', ()=>pingServer());
+
+  // Admin: Long-Press auf Titel (3s)
+  let pressTimer=null;
+  const title = S('title');
+  title.addEventListener('mousedown', () => pressTimer = setTimeout(openAdmin, 3000));
+  title.addEventListener('touchstart', () => pressTimer = setTimeout(openAdmin, 3000), {passive:true});
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev => title.addEventListener(ev, ()=>{ clearTimeout(pressTimer); }));
+
+  S('saveCfg').addEventListener('click', saveAdminConfig);
+  S('cancelCfg').addEventListener('click', closeAdmin);
+
+  // Konfiguration vom Server
+  await loadServerConfig();
+});
+
+/* ===== Server-Konfig laden ===== */
+async function loadServerConfig(){
+  S('cfgHint').textContent = 'Lade zentrale Einstellungen …';
+  try{
+    const res = await fetch(SERVER_URL + '?action=config&t=' + Date.now());
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || 'Unbekannter Fehler');
+    serverConfig = data.config;
+    S('cfgHint').textContent = 'Einstellungen geladen.';
+  }catch(e){
+    serverConfig = null;
+    S('cfgHint').textContent = 'Konnte zentrale Einstellungen nicht laden – Standard wird verwendet.';
+  }
+}
+
+/* ===== Start mit zentraler Konfig ===== */
+function startFlow(DEVICE_ID){
+  const base = serverConfig || {
+    ops:['+','-','*','/'], useAdv:true,
+    adv:{'+':{active:true,min:10,max:150,weight:1},'-':{active:true,min:10,max:150,weight:1},'*':{active:true,min:1,max:12,weight:1},'/':{active:true,min:1,max:12,weight:1}},
+    allowNeg:false, divInt:true, count:12, gap:0.3
+  };
+  cfg = {
+    name:  (S('name').value.trim()  || 'Unbekannt'),
+    group: (S('group').value.trim() || '-'),
+    ...JSON.parse(JSON.stringify(base))
+  };
+  // reset states
+  sentOnce = false;
+  setSendButtonEnabled(true);
+
+  // Aufgaben erzeugen
+  tasks = []; results = []; opsUsed = [];
+  for (let i=0;i<cfg.count;i++){
+    const {q,val,op} = makeTask(cfg);
+    tasks.push(q); results.push(val); opsUsed.push(op);
+  }
+  idx=0; answers=[]; correctFlags=[]; durations=[];
+  hide('screen-start'); show('screen-quiz'); renderQuestion();
+}
+
+/* ===== Ablauf ===== */
+function renderQuestion(){
+  if (idx >= tasks.length){ showResults(); return; }
+  // Anzeige getrennt: Index und Aufgabe
+  S('taskIndex').textContent = `Aufgabe ${idx+1} / ${cfg.count}`;
+  S('taskText').textContent = tasks[idx];
+
+  S('progress').textContent = '';
+  S('answer').value = '';
+  setInputEnabled(true);
+  state = 'await';
+  S('answer').focus();
+  tStartQ = performance.now();
+}
+
+function trySubmit(){
+  if (state !== 'await') return;   // Debounce: nur im Wartezustand zulassen
+  setInputEnabled(false);
+  submitAnswer();
+}
+
+function setInputEnabled(enabled){
+  S('answer').disabled = !enabled;
+  S('ok').disabled = !enabled;
+}
+
+function submitAnswer(){
+  if (idx >= tasks.length) return;
+
+  const tEnd = performance.now();
+  const dtSec = Math.max(0, (tEnd - tStartQ)/1000);
+  durations.push(dtSec);
+
+  let t = (S('answer').value||'').trim().replace(',', '.');
+  if (t===''){
+    alert('Bitte eine Zahl eingeben.');
+    durations.pop();
+    setInputEnabled(true);
+    state = 'await';
+    return;
+  }
+  let a = Number(t);
+  if (!isFinite(a)){
+    alert('Bitte eine gültige Zahl eingeben.');
+    durations.pop();
+    setInputEnabled(true);
+    state = 'await';
+    return;
+  }
+
+  answers.push(a);
+  const correct = results[idx];
+  const ok = (typeof correct === 'number' && !Number.isInteger(correct))
+              ? Math.abs(a - correct) < 1e-9 : a === correct;
+  correctFlags.push(!!ok);
+  idx++;
+
+  if (idx >= tasks.length){
+    showResults();
+  } else {
+    // Übergangsphase: kein Doppelklick möglich
+    state = 'transition';
+    // kleine Pause (cfg.gap), dann nächste Aufgabe rendern
+    clearTimeout(timerNext);
+    timerNext = setTimeout(renderQuestion, Math.max(80, (cfg.gap||0)*1000));
+  }
+}
+
+/* ===== Ergebnisse ===== */
+function showResults(){
+  hide('screen-quiz'); show('screen-results');
+
+  const total = tasks.length;
+  const correct = correctFlags.filter(Boolean).length;
+  const pct = total ? (100*correct/total) : 0;
+  S('summary').textContent = `${cfg.name} (${cfg.group}) – Richtig: ${correct} / ${total}  (${pct.toFixed(1)}%)`;
+
+  const avg = durations.reduce((a,b)=>a+b,0) / (durations.length||1);
+  const sorted = [...durations].sort((a,b)=>a-b);
+  const med = sorted.length ? (sorted.length%2 ? sorted[(sorted.length-1)/2] : (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2) : 0;
+  const fastest = durations.length ? Math.min(...durations) : 0;
+  const slowest = durations.length ? Math.max(...durations) : 0;
+  S('timingStats').innerHTML = `Ø&nbsp;Zeit/Aufgabe: <b>${avg.toFixed(2)}s</b><br>
+    Median: <b>${med.toFixed(2)}s</b><br>
+    Schnellste: <b>${fastest.toFixed(2)}s</b> – Langsamste: <b>${slowest.toFixed(2)}s</b>`;
+
+  // Fehlerschwerpunkte
+  const per = { '+':[0,0,0], '-':[0,0,0], '*':[0,0,0], '/':[0,0,0] };
+  correctFlags.forEach((ok,i)=>{ const op=opsUsed[i]; per[op][1]++; if (ok) per[op][0]++; per[op][2]+=durations[i]||0; });
+
+  let hot = `<h3>Fehlerschwerpunkte</h3><ul>`;
+  Object.entries(per).forEach(([op,[ok,tot,sumT]])=>{
+    if (tot){
+      const acc = Math.round(100*ok/tot);
+      const avgT = (sumT/tot)||0;
+      const cls = (acc<70)?'bad':(acc>=90?'ok':'');
+      hot += `<li>${op}: <span class="${cls}">${ok}/${tot} (${acc}%)</span>, Ø&nbsp;Zeit: ${avgT.toFixed(2)}s</li>`;
+    }
+  });
+  hot += `</ul>`;
+  const wrong = [];
+  tasks.forEach((q,i)=>{ if (!correctFlags[i]) wrong.push({i, q, corr: results[i], ans: answers[i], op: opsUsed[i], t: durations[i]}); });
+  if (wrong.length){
+    hot += `<div class="muted">Falsche Aufgaben (${wrong.length}):</div><ul>`;
+    wrong.forEach(w=>{ hot += `<li>${w.i+1}. ${w.q} = ${w.corr} | deine Antwort: <b>${w.ans}</b> (${w.op}, ${w.t.toFixed(2)}s)</li>`; });
+    hot += `</ul>`;
+  } else {
+    hot += `<div class="ok">Keine Fehler – stark!</div>`;
+  }
+  S('hotspots').innerHTML = hot;
+
+  const lines = [];
+  tasks.forEach((q,i)=>{
+    const ok = correctFlags[i]; const m = ok ? '✓' : '✗';
+    lines.push(`${i+1}. ${q}  =  ${results[i]}   | deine Antwort: ${answers[i]}   ${m}   (${opsUsed[i]}, ${durations[i].toFixed(2)}s)`);
+  });
+  S('details').textContent = lines.join('\n');
+}
+
+/* ===== Dataset / CSV ===== */
+function dataset(DEVICE_ID){
+  const now = new Date().toISOString();
+  return {
+    device_id: DEVICE_ID, timestamp: now,
+    name: cfg.name, group: cfg.group,
+    settings: {
+      ops: cfg.ops, allow_neg: cfg.allowNeg, div_int: cfg.divInt,
+      count: cfg.count, gap: cfg.gap, use_adv: cfg.useAdv, adv: cfg.adv
+    },
+    score: { correct: correctFlags.filter(Boolean).length, total: tasks.length,
+             percent: tasks.length? (100*correctFlags.filter(Boolean).length/tasks.length):0 },
+    timing: {
+      per_question_s: durations,
+      avg_s: durations.length? (durations.reduce((a,b)=>a+b,0)/durations.length):0,
+      median_s: (()=>{const s=[...durations].sort((a,b)=>a-b);return s.length?(s.length%2?s[(s.length-1)/2]:(s[s.length/2-1]+s[s.length/2])/2):0;})()
+    },
+    items: tasks.map((q,i)=>({ q, op: opsUsed[i], answer: answers[i], correct: results[i], is_correct: !!correctFlags[i], time_s: durations[i] }))
+  };
+}
+function downloadCSV(DEVICE_ID){
+  const d = dataset(DEVICE_ID);
+  const header = 'timestamp,device_id,name,group,correct,total,percent,ops,avg_time_s,median_time_s\n';
+  const row = `${d.timestamp},${d.device_id},${csv(d.name)},${csv(d.group)},${d.score.correct},${d.score.total},${d.score.percent.toFixed(1)},${csv(d.settings.ops.join(''))},${d.timing.avg_s.toFixed(2)},${d.timing.median_s.toFixed(2)}\n`;
+  const blob = new Blob([header, row], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'kopftrainer_stats.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
+const csv = s => `"${String(s).replaceAll('"','""')}"`;
+
+/* ===== Upload: einmalig ===== */
+function setSendButtonEnabled(enabled){
+  const b = S('send');
+  b.disabled = !enabled;
+  b.textContent = enabled ? 'An Zentrale senden' : 'Bereits gesendet';
+}
+async function sendToServerOnce(DEVICE_ID){
+  if (sentOnce){ return; }       // harte Sperre
+  sentOnce = true;
+  setSendButtonEnabled(false);
+  await sendToServer(DEVICE_ID); // Upload durchführen
+}
+async function sendToServer(DEVICE_ID){
+  const status = S('sendStatus');
+  status.textContent = 'Sende …';
+  const url = SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 't=' + Date.now();
+  const payload = JSON.stringify(dataset(DEVICE_ID));
+  try{
+    let res = await fetch(url, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: payload });
+    let ok = res.ok, msg = `HTTP ${res.status}`;
+    try { const js = await res.json(); ok = ok && js.ok !== false; msg = js.ok ? 'Daten gesendet.' : (js.error || msg); } catch(_){}
+    status.textContent = ok ? 'Daten gesendet.' : ('Fehler: ' + msg);
+  }catch(e){ status.textContent = 'Senden fehlgeschlagen: ' + e.message; }
+}
+
+/* ===== Ping (GET) ===== */
+async function pingServer(){
+  const el = S('cfgHint');
+  try{
+    const res = await fetch(SERVER_URL + (SERVER_URL.includes('?') ? '&' : '?') + 'ping=1');
+    el.textContent = res.ok ? 'Server erreichbar.' : `Ping HTTP ${res.status}`;
+  }catch(e){ el.textContent = 'Ping fehlgeschlagen: ' + e.message; }
+}
+
+/* ===== Reset ===== */
+function resetAll(){
+  clearTimeout(timerNext);
+  state = 'await';
+  show('screen-start'); hide('screen-quiz'); hide('screen-results');
+}
+
+/* ===== Aufgaben-Generator ===== */
+function makeTask(cfg){
+  let op;
+  if (cfg.useAdv) {
+    const pool = [];
+    for (const o of Object.keys(cfg.adv)){
+      const a = cfg.adv[o]; if (!a || !a.active || !cfg.ops.includes(o) || a.min >= a.max) continue;
+      const w = Math.max(0, a.weight||0);
+      for (let i=0;i<w;i++) pool.push(o);
+    }
+    const cand = pool.length ? pool
+      : Object.keys(cfg.adv).filter(o=>cfg.adv[o].active && cfg.ops.includes(o) && cfg.adv[o].min < cfg.adv[o].max);
+    op = cand[Math.floor(Math.random()*cand.length)];
+  } else {
+    op = cfg.ops[Math.floor(Math.random()*cfg.ops.length)];
+  }
+
+  const range = (o)=> cfg.useAdv ? {mn: cfg.adv[o].min, mx: cfg.adv[o].max} : {mn: 1, mx: 150};
+  const {mn, mx} = range(op);
+  const rnd = (a,b)=>Math.floor(Math.random()*(b-a+1))+a;
+
+  if (op==='+'){ const a=rnd(mn,mx), b=rnd(mn,mx); return { q:`${a} + ${b}`, val:a+b, op:'+' }; }
+  if (op==='-'){ let a=rnd(mn,mx), b=rnd(mn,mx); if (!cfg.allowNeg && a<b) [a,b]=[b,a]; return { q:`${a} - ${b}`, val:a-b, op:'-' }; }
+  if (op==='*'){ const a=rnd(mn,mx), b=rnd(mn,mx); return { q:`${a} × ${b}`, val:a*b, op:'*' }; }
+  if (cfg.divInt){
+    let res=rnd(Math.max(1,mn), Math.max(1,mx)), b=rnd(Math.max(1,mn), Math.max(1,mx));
+    if (cfg.allowNeg && Math.random()<0.5) res = -res;
+    const a = res*b; return { q:`${a} ÷ ${b}`, val:res, op:'/' };
+  } else {
+    let a=rnd(mn,mx), b=rnd(Math.max(1,mn), Math.max(1,mx));
+    if (!cfg.allowNeg){ a=Math.abs(a); b=Math.abs(b); }
+    return { q:`${a} ÷ ${b}`, val:a/b, op:'/' };
+  }
+}
+
+/* ===== Admin-Modal ===== */
+function openAdmin(){
+  const c = serverConfig || {
+    ops:['+','-','*','/'], useAdv:true,
+    adv:{'+':{active:true,min:10,max:150,weight:1},'-':{active:true,min:10,max:150,weight:1},'*':{active:true,min:1,max:12,weight:1},'/':{active:true,min:1,max:12,weight:1}},
+    allowNeg:false, divInt:true, count:12, gap:0.3
+  };
+  S('opPlus').checked  = c.ops.includes('+');
+  S('opMinus').checked = c.ops.includes('-');
+  S('opMul').checked   = c.ops.includes('*');
+  S('opDiv').checked   = c.ops.includes('/');
+
+  S('allowNeg').checked = !!c.allowNeg;
+  S('divInt').checked   = !!c.divInt;
+  S('count').value = c.count || 12;
+  S('gap').value   = c.gap ?? 0.3;
+
+  ['+','-','*','/'].forEach(op=>{
+    const tr = document.querySelector(`tr[data-op="${op}"]`);
+    const a = (c.adv && c.adv[op]) ? c.adv[op] : {active:false,min:1,max:10,weight:1};
+    tr.querySelector('.a').checked = !!a.active;
+    tr.querySelector('.mn').value  = a.min ?? 1;
+    tr.querySelector('.mx').value  = a.max ?? 10;
+    tr.querySelector('.w').value   = a.weight ?? 1;
+  });
+
+  S('adminStatus').textContent = '';
+  S('adminKey').value = '';
+  S('adminModal').style.display = 'flex';
+}
+function closeAdmin(){ S('adminModal').style.display = 'none'; }
+
+async function saveAdminConfig(){
+  const ops = [];
+  if (S('opPlus').checked)  ops.push('+');
+  if (S('opMinus').checked) ops.push('-');
+  if (S('opMul').checked)   ops.push('*');
+  if (S('opDiv').checked)   ops.push('/');
+
+  const cfgNew = {
+    ops,
+    useAdv: true,
+    adv: {},
+    allowNeg: S('allowNeg').checked,
+    divInt: S('divInt').checked,
+    count: Math.max(1, Math.min(500, parseInt(S('count').value,10) || 12)),
+    gap: Math.max(0, parseFloat(S('gap').value) || 0.3)
+  };
+  ['+','-','*','/'].forEach(op=>{
+    const tr = document.querySelector(`tr[data-op="${op}"]`);
+    cfgNew.adv[op] = {
+      active: tr.querySelector('.a').checked,
+      min: parseInt(tr.querySelector('.mn').value,10) || 1,
+      max: parseInt(tr.querySelector('.mx').value,10) || 10,
+      weight: Math.max(0, parseInt(tr.querySelector('.w').value,10) || 0)
+    };
+  });
+
+  const adminKey = S('adminKey').value;
+  if (!adminKey){ S('adminStatus').textContent = 'Bitte Admin-Passwort eingeben.'; return; }
+
+  S('adminStatus').textContent = 'Speichere …';
+  try{
+    const res = await fetch(SERVER_URL, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body: JSON.stringify({ type:'config', admin_key: adminKey, config: cfgNew })
+    });
+    let ok = res.ok, msg = `HTTP ${res.status}`;
+    try { const js = await res.json(); ok = ok && js.ok !== false; msg = js.ok ? 'Gespeichert.' : (js.error || msg); } catch(_){}
+    if (ok){
+      S('adminStatus').textContent = 'Gespeichert. Lade Konfiguration …';
+      await loadServerConfig();
+      setTimeout(()=>{ S('adminStatus').textContent = 'Fertig.'; }, 400);
+    } else {
+      S('adminStatus').textContent = 'Fehler: ' + msg;
+    }
+  }catch(e){
+    S('adminStatus').textContent = 'Speichern fehlgeschlagen: ' + e.message;
+  }
+}
+</script>
+</body>
+</html>
