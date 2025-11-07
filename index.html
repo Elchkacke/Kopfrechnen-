@@ -1,117 +1,339 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kopfrechen Trainer</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kopfrechnen Trainer</title>
+<meta name="robots" content="noindex">
 <style>
-  body {
-    font-family: sans-serif;
-    text-align: center;
-    background: #f0f0f0;
-    margin: 0;
-    padding: 20px;
-  }
-  #task {
-    font-size: 3em;
-    font-weight: bold;
-    margin: 30px 0;
-  }
-  input {
-    font-size: 1.5em;
-    padding: 10px;
-    width: 150px;
-  }
-  button {
-    font-size: 1.2em;
-    padding: 10px 20px;
-    margin-top: 20px;
-  }
-  #message {
-    margin-top: 20px;
-    font-size: 1.2em;
-  }
+  :root { --accent:#0a84ff; --ok:#34c759; --bad:#ff3b30; }
+  html,body{margin:0;background:#fff;font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#111}
+  .wrap{max-width:900px;margin:0 auto;padding:16px}
+  h1{margin:8px 0 12px}
+  .card{border:1px solid #e5e5ea;border-radius:12px;padding:16px}
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .col{flex:1 1 280px;min-width:260px}
+  label{display:block;margin:6px 0 4px;font-size:14px}
+  input[type="text"],input[type="number"]{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ccc;border-radius:8px;font-size:16px}
+  button{appearance:none;border:none;background:var(--accent);color:#fff;border-radius:10px;padding:12px 16px;font-size:16px;cursor:pointer}
+  button.secondary{background:#d1d1d6;color:#111}
+  button[disabled]{opacity:.55;cursor:not-allowed}
+  .task-index{text-align:center;font-size:18px;color:#444}
+  .task-big{font-weight:700;font-size:46px;text-align:center;margin:10px 0 8px}
+  .input-inline{display:flex;gap:10px;justify-content:center;margin:10px 0}
+  .input-inline input{max-width:220px;text-align:center;font-size:20px}
+  .muted{color:#777;font-size:14px}
+  .ok{color:var(--ok);font-weight:600}
+  .bad{color:var(--bad);font-weight:600}
+  pre{white-space:pre-wrap}
+  dialog{border:none;border-radius:12px;padding:0;max-width:520px;width:calc(100% - 32px)}
+  dialog .head{padding:14px 16px;font-weight:600;border-bottom:1px solid #eee}
+  dialog .body{padding:14px 16px}
+  dialog .foot{padding:12px 16px;border-top:1px solid #eee;display:flex;gap:8px;justify-content:flex-end}
 </style>
 </head>
 <body>
-<h1>Kopfrechnen Trainer</h1>
-<div id="name-field">
-  <p>Dein Name:</p>
-  <input type="text" id="username" placeholder="Vorname">
-  <br>
-  <button onclick="start()">Start</button>
+<div class="wrap">
+  <h1 id="title">🧮 Kopfrechnen Trainer</h1>
+
+  <!-- Start (nur Name & Klasse) -->
+  <section id="screen-start" class="card">
+    <div class="row">
+      <div class="col">
+        <label for="name">Name</label>
+        <input id="name" type="text" placeholder="Vor- und Nachname">
+      </div>
+      <div class="col">
+        <label for="group">Klasse / Gruppe</label>
+        <input id="group" type="text" placeholder="z. B. 5a">
+      </div>
+    </div>
+    <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+      <button id="start">Start</button>
+      <button id="ping" class="secondary" type="button">Server-Ping</button>
+      <span id="cfgHint" class="muted"></span>
+    </div>
+  </section>
+
+  <!-- Quiz -->
+  <section id="screen-quiz" class="card" style="display:none">
+    <div id="taskIndex" class="task-index">Aufgabe — / —</div>
+    <div id="taskText" class="task-big">—</div>
+    <div class="input-inline">
+      <input id="answer" type="text" inputmode="decimal" placeholder="Antwort">
+      <button id="ok">OK</button>
+    </div>
+    <p id="progress" class="muted"></p>
+  </section>
+
+  <!-- Ergebnisse + Analyse -->
+  <section id="screen-results" class="card" style="display:none">
+    <h2>Auswertung</h2>
+    <div id="summary" style="font-weight:600;margin-bottom:6px"></div>
+    <div id="timing" class="muted"></div>
+    <h3 style="margin-top:16px">Fehlerschwerpunkte</h3>
+    <div id="hotspots" class="muted"></div>
+    <h3>Details</h3>
+    <pre id="details"></pre>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <button id="again" class="secondary">Neu starten</button>
+      <button id="send">An Zentrale senden</button>
+      <span id="sendStatus" class="muted"></span>
+    </div>
+  </section>
 </div>
 
-<div id="trainer" style="display:none;">
-  <div id="task"></div>
-  <input type="number" id="answer" placeholder="Antwort">
-  <br>
-  <button onclick="next()">Weiter</button>
-  <div id="message"></div>
-</div>
+<!-- Verstecktes Lehrer-Dialogfenster (Langdruck auf Titel) -->
+<dialog id="adminDlg">
+  <div class="head">Lehrer-Einstellungen</div>
+  <div class="body">
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="flex:1 1 110px">
+        <label>Anzahl Aufgaben</label>
+        <input id="cfg_count" type="number" min="1" max="200">
+      </div>
+      <div style="flex:1 1 110px">
+        <label>Min (±)</label>
+        <input id="cfg_min" type="number">
+      </div>
+      <div style="flex:1 1 110px">
+        <label>Max (±)</label>
+        <input id="cfg_max" type="number">
+      </div>
+      <div style="flex:1 1 110px">
+        <label>× bis</label>
+        <input id="cfg_multmax" type="number" min="1" max="20">
+      </div>
+      <div style="flex:1 1 110px">
+        <label>÷ bis</label>
+        <input id="cfg_divmax" type="number" min="1" max="20">
+      </div>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:10px;flex-wrap:wrap">
+      <label><input type="checkbox" id="cfg_plus"> Plus</label>
+      <label><input type="checkbox" id="cfg_minus"> Minus</label>
+      <label><input type="checkbox" id="cfg_mult"> Mal</label>
+      <label><input type="checkbox" id="cfg_div"> Geteilt</label>
+      <label><input type="checkbox" id="cfg_allowneg"> Negative bei − erlauben</label>
+      <label><input type="checkbox" id="cfg_divint" checked> ÷ nur ganzzahlig</label>
+    </div>
+    <div class="muted" id="adminInfo" style="margin-top:6px"></div>
+    <div style="margin-top:10px">
+      <label>Admin-PIN</label>
+      <input id="adminPin" type="password" placeholder="PIN eingeben">
+    </div>
+  </div>
+  <div class="foot">
+    <button class="secondary" id="adminCancel" type="button">Schließen</button>
+    <button id="adminSave" type="button">Speichern</button>
+  </div>
+</dialog>
 
 <script>
-const SERVER_URL = "https://script.google.com/macros/s/AKfycbzMZxhwWbjAkGnlzwRM6JqJQH3iQ2n3d8Y4ywfnhVhqOiMkXXgfiexXQZOwyJ2_eNpt6Q/exec";
+/* ======= SERVER-URL EINTRAGEN ======= */
+const SERVER_URL = "https://script.google.com/macros/s/AKfycbxovXubpvDSgKpn2vSU6r8eEJ97ZYArGxraFFs4ypFrz_s6bLfBTAC2U2k83t9Gsqry6A/exec";
+/* =================================== */
 
-let current = 0;
-let correct = 0;
-let startTime;
-let name;
-let tasks = [];
+const S = id => document.getElementById(id);
+const show = id => S(id).style.display='';
+const hide = id => S(id).style.display='none';
 
-function randomTask() {
-  const a = Math.floor(Math.random() * 100) + 1;
-  const b = Math.floor(Math.random() * 100) + 1;
-  const op = ["+","-","*","/"][Math.floor(Math.random()*4)];
-  let result = eval(`${a}${op}${b}`);
-  result = Math.round(result * 100) / 100;
-  return {text:`${a} ${op} ${b}`, result};
-}
+/* ===== Zentrale Konfiguration vom Server ===== */
+let CFG = { count:12, ops:['+','-','*','/'], min:1, max:150, multMax:12, divMax:12, allowNeg:false, divInt:true };
 
-function start() {
-  name = document.getElementById('username').value.trim();
-  if (!name) return alert("Bitte gib deinen Namen ein.");
-  document.getElementById('name-field').style.display = "none";
-  document.getElementById('trainer').style.display = "block";
-  tasks = Array.from({length:7}, randomTask);
-  startTime = Date.now();
-  showTask();
-}
-
-function showTask() {
-  document.getElementById('task').innerText = tasks[current].text;
-  document.getElementById('answer').value = "";
-  document.getElementById('message').innerText = "";
-}
-
-function next() {
-  const answer = parseFloat(document.getElementById('answer').value);
-  if (isNaN(answer)) return alert("Bitte gib eine Zahl ein.");
-  const t = tasks[current];
-  if (Math.abs(answer - t.result) < 0.01) correct++;
-  current++;
-  if (current < tasks.length) showTask();
-  else finish();
-}
-
-async function finish() {
-  const time = (Date.now() - startTime) / 1000;
-  const score = correct * 100 - time;
-  document.getElementById('trainer').innerHTML = `
-    <h2>Fertig!</h2>
-    <p>Punkte: ${score.toFixed(0)}</p>
-    <p>Zeit: ${time.toFixed(1)} Sekunden</p>
-    <button onclick="location.reload()">Neu starten</button>
-  `;
-  try {
-    await fetch(SERVER_URL, {
-      method: "POST",
-      body: JSON.stringify({name, correct, time, score})
-    });
-  } catch (err) {
-    console.error(err);
+async function loadConfig(){
+  try{
+    const r = await fetch(SERVER_URL + '?action=config&t=' + Date.now());
+    const js = await r.json();
+    if (js && js.ok && js.config) { CFG = js.config; S('cfgHint').textContent = 'Konfiguration geladen.'; return; }
+    S('cfgHint').textContent = 'Standard-Konfig aktiv.';
+  }catch(e){
+    S('cfgHint').textContent = 'Konfig nicht erreichbar – Standard.';
   }
 }
+loadConfig();
+
+/* ===== Aufgaben-Generator nutzt CFG ===== */
+function rnd(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function makeTask(){
+  const opsAvail = CFG.ops && CFG.ops.length ? CFG.ops : ['+','-','*','/'];
+  const op = opsAvail[Math.floor(Math.random()*opsAvail.length)];
+  if (op === '+'){ const a=rnd(CFG.min,CFG.max), b=rnd(CFG.min,CFG.max); return {q:`${a} + ${b}`, v:a+b, op:'+'}; }
+  if (op === '-'){ let a=rnd(CFG.min,CFG.max), b=rnd(CFG.min,CFG.max); if(!CFG.allowNeg && a<b) [a,b]=[b,a]; return {q:`${a} − ${b}`, v:a-b, op:'-'}; }
+  if (op === '*'){ const a=rnd(1,CFG.multMax), b=rnd(1,CFG.multMax); return {q:`${a} × ${b}`, v:a*b, op:'*'}; }
+  // Division
+  if (CFG.divInt){ const res=rnd(1,CFG.divMax), b=rnd(1,CFG.divMax), a=res*b; return {q:`${a} ÷ ${b}`, v:res, op:'/'}; }
+  else{ const a=rnd(1,CFG.max), b=rnd(1,CFG.divMax); return {q:`${a} ÷ ${b}`, v:(a/b), op:'/'}; }
+}
+
+/* ===== Laufvariablen ===== */
+let tasks=[], results=[], ops=[], times=[], answers=[], corrects=[];
+let idx=0, tStart=0, runId=null, sent=false, sending=false, user={name:'', group:''};
+
+/* ===== Start / Render / Submit ===== */
+function start(){
+  const name = S('name').value.trim();
+  const group= S('group').value.trim();
+  if (!name || !group){ alert('Bitte Name und Klasse eingeben.'); return; }
+  user = {name, group};
+
+  tasks=[]; results=[]; ops=[]; times=[]; answers=[]; corrects=[];
+  const N = Math.max(1, Math.min(200, CFG.count||12));
+  for (let i=0;i<N;i++){ const t=makeTask(); tasks.push(t.q); results.push(t.v); ops.push(t.op); }
+  idx=0; runId=`run_${Date.now()}_${Math.random().toString(16).slice(2)}`; sent=false; sending=false;
+
+  hide('screen-start'); show('screen-quiz'); render();
+}
+function render(){
+  if (idx>=tasks.length){ return showResults(); }
+  S('taskIndex').textContent = `Aufgabe ${idx+1} / ${tasks.length}`;
+  S('taskText').textContent  = tasks[idx];
+  S('progress').textContent  = '';
+  S('answer').value=''; S('answer').disabled=false; S('ok').disabled=false; S('answer').focus();
+  tStart = performance.now();
+}
+function submit(){
+  if (idx>=tasks.length) return;
+  S('answer').disabled=true; S('ok').disabled=true;
+
+  const dt = (performance.now()-tStart)/1000; times.push(dt);
+  let val = (S('answer').value||'').trim().replace(',', '.');
+  if (val===''){ alert('Bitte Zahl eingeben.'); times.pop(); S('answer').disabled=false; S('ok').disabled=false; S('answer').focus(); return; }
+  const a = Number(val);
+  if (!isFinite(a)){ alert('Bitte gültige Zahl eingeben.'); times.pop(); S('answer').disabled=false; S('ok').disabled=false; S('answer').focus(); return; }
+
+  answers.push(a);
+  const ok = (Math.abs(a - results[idx]) < 1e-9); corrects.push(ok);
+  idx++;
+  setTimeout(render, 120);
+}
+
+/* ===== Analyse & Senden ===== */
+function showResults(){
+  hide('screen-quiz'); show('screen-results');
+
+  const total = tasks.length;
+  const right = corrects.filter(Boolean).length;
+  const pct   = total? (100*right/total):0;
+
+  const avg = times.reduce((x,y)=>x+y,0)/(times.length||1);
+  const sorted=[...times].sort((a,b)=>a-b);
+  const med = sorted.length?(sorted.length%2?sorted[(sorted.length-1)/2]:(sorted[sorted.length/2-1]+sorted[sorted.length/2])/2):0;
+
+  S('summary').textContent = `${user.name} (${user.group}) – Richtig: ${right}/${total} (${pct.toFixed(1)}%)`;
+  S('timing').textContent  = `Ø Zeit/Aufgabe: ${avg.toFixed(2)}s • Median: ${med.toFixed(2)}s • Schnellste: ${Math.min(...times).toFixed(2)}s • Langsamste: ${Math.max(...times).toFixed(2)}s`;
+
+  const per = { '+':[0,0], '-':[0,0], '*':[0,0], '/':[0,0] };
+  corrects.forEach((ok,i)=>{ per[ops[i]][1]++; if (ok) per[ops[i]][0]++; });
+  let hot = '<ul>';
+  Object.entries(per).forEach(([op,[ok,tot]])=>{
+    if (!tot) return;
+    const acc = Math.round(100*ok/tot);
+    const cls = acc<70?'bad':(acc>=90?'ok':'');
+    hot += `<li>${op}: <span class="${cls}">${ok}/${tot} (${acc}%)</span></li>`;
+  });
+  hot += '</ul>';
+  S('hotspots').innerHTML = hot;
+
+  const lines=[];
+  tasks.forEach((q,i)=>{
+    const m = corrects[i] ? '✓' : '✗';
+    lines.push(`${i+1}. ${q} = ${results[i]} | deine Antwort: ${answers[i]}   ${m}   (${ops[i]}, ${times[i].toFixed(2)}s)`);
+  });
+  S('details').textContent = lines.join('\n');
+
+  setSendBtn(true);
+}
+function dataset(){
+  const right = corrects.filter(Boolean).length;
+  const time  = times.reduce((x,y)=>x+y,0);
+  const score = right*100 - time; // simple Kennzahl
+  return {
+    run_id: runId,
+    name: user.name,
+    group: user.group,
+    total: tasks.length,
+    correct: right,
+    time: Number(time.toFixed(2)),
+    score: Number(score.toFixed(0))
+  };
+}
+function setSendBtn(enabled){ S('send').disabled = !enabled; S('send').textContent = enabled? 'An Zentrale senden' : 'Bereits gesendet'; }
+async function sendOnce(){
+  if (sent || sending) return;
+  sent=true; sending=true; setSendBtn(false);
+  S('sendStatus').textContent='Sende …';
+  try{
+    const r = await fetch(SERVER_URL+'?t='+Date.now(), { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify(dataset()) });
+    if (!r.ok){ S('sendStatus').textContent='Fehler: HTTP '+r.status; return; }
+    const js = await r.json().catch(()=>null);
+    if (js && js.dedup) S('sendStatus').textContent='Bereits übertragen (Duplikat ignoriert).';
+    else S('sendStatus').textContent='Daten gesendet.';
+  }catch(e){ S('sendStatus').textContent='Senden fehlgeschlagen: '+e.message; }
+  finally{ sending=false; }
+}
+
+/* ===== Verstecktes Lehrer-Menü (Langdruck auf Titel) ===== */
+let _pressTimer=null;
+S('title').addEventListener('touchstart', () => _pressTimer=setTimeout(openAdmin, 2000));
+S('title').addEventListener('mousedown',  () => _pressTimer=setTimeout(openAdmin, 2000));
+['touchend','mouseup','mouseleave'].forEach(ev=> S('title').addEventListener(ev, ()=>clearTimeout(_pressTimer)));
+
+async function openAdmin(){
+  // Konfig in Dialog laden
+  S('cfg_count').value   = CFG.count;
+  S('cfg_min').value     = CFG.min;
+  S('cfg_max').value     = CFG.max;
+  S('cfg_multmax').value = CFG.multMax;
+  S('cfg_divmax').value  = CFG.divMax;
+  S('cfg_plus').checked  = CFG.ops.includes('+');
+  S('cfg_minus').checked = CFG.ops.includes('-');
+  S('cfg_mult').checked  = CFG.ops.includes('*');
+  S('cfg_div').checked   = CFG.ops.includes('/');
+  S('cfg_allowneg').checked = !!CFG.allowNeg;
+  S('cfg_divint').checked   = !!CFG.divInt;
+  S('adminPin').value='';
+  S('adminInfo').textContent = 'Langdruck erkannt – Änderungen wirken für alle Geräte.';
+  S('adminDlg').showModal();
+}
+S('adminCancel').addEventListener('click', ()=> S('adminDlg').close());
+S('adminSave').addEventListener('click', async ()=>{
+  const newCfg = {
+    count:  Math.max(1, Math.min(200, parseInt(S('cfg_count').value,10)||12)),
+    min:    parseInt(S('cfg_min').value,10)||1,
+    max:    parseInt(S('cfg_max').value,10)||150,
+    multMax:parseInt(S('cfg_multmax').value,10)||12,
+    divMax: parseInt(S('cfg_divmax').value,10)||12,
+    ops: ['+','-','*','/'].filter((op,i)=> [S('cfg_plus'),S('cfg_minus'),S('cfg_mult'),S('cfg_div')][i].checked),
+    allowNeg: !!S('cfg_allowneg').checked,
+    divInt:   !!S('cfg_divint').checked
+  };
+  if (!newCfg.ops.length){ alert('Mindestens einen Operator wählen.'); return; }
+
+  const pin = S('adminPin').value.trim();
+  if (!pin){ alert('Admin-PIN erforderlich.'); return; }
+
+  S('adminInfo').textContent = 'Speichere …';
+  try{
+    const r = await fetch(SERVER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ type:'config', admin_key: pin, config: newCfg }) });
+    const js = await r.json();
+    if (js && js.ok){ CFG = js.config; S('adminInfo').textContent='Gespeichert. (Konfig übernommen)'; }
+    else { S('adminInfo').textContent='Fehler: ' + (js?.error || ('HTTP '+r.status)); }
+  }catch(e){ S('adminInfo').textContent='Fehler: '+e.message; }
+});
+
+/* ===== Events ===== */
+document.addEventListener('DOMContentLoaded', ()=>{
+  S('start').addEventListener('click', start);
+  S('ok').addEventListener('click', submit);
+  S('answer').addEventListener('keydown', e=>{ if (e.key==='Enter') submit(); });
+  S('again').addEventListener('click', ()=>{ hide('screen-results'); show('screen-start'); });
+  S('send').addEventListener('click', sendOnce);
+  S('ping').addEventListener('click', async ()=>{
+    try{ const r = await fetch(SERVER_URL+'?ping=1'); S('cfgHint').textContent = r.ok ? 'Server erreichbar.' : ('Ping HTTP '+r.status); }
+    catch(e){ S('cfgHint').textContent = 'Ping fehlgeschlagen: '+e.message; }
+  });
+});
 </script>
 </body>
 </html>
