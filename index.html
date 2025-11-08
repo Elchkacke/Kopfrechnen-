@@ -5,68 +5,113 @@
   <title>Kopfrechnen Trainer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    body{font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#fafafa;color:#111}
+    :root{
+      --ink:#111; --muted:#6b7280; --bg:#fafafa; --card:#fff; --line:#e5e7eb; --accent:#0a84ff;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
     .wrap{max-width:900px;margin:0 auto;padding:16px}
     header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-    button{appearance:none;border:none;background:#0a84ff;color:#fff;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
+    h1{font-size:22px;margin:0}
+    button{appearance:none;border:none;background:var(--accent);color:#fff;border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer}
     button.secondary{background:#e5e7eb;color:#111}
-    dialog{border:none;border-radius:12px;padding:0;max-width:92vw}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .grid{display:grid;gap:12px}
+    label{display:grid;gap:6px}
+    input,select{padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff}
+    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+    .hint{color:var(--muted);font-size:13px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .ops{display:flex;gap:8px;flex-wrap:wrap}
+    .chip{
+      padding:10px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;user-select:none;
+      min-width:44px;text-align:center;font-weight:600
+    }
+    .chip.active{background:#eef4ff;border-color:#cfe1ff;color:#0a53ff}
+    dialog{border:none;border-radius:16px;padding:0;max-width:92vw}
     dialog form{padding:16px}
     .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-    input,select{padding:8px;border:1px solid #e5e7eb;border-radius:8px;width:100%}
-    label{display:grid;gap:6px}
-    .grid{display:grid;gap:12px}
+    .toolbar{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-bottom:10px}
+    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--muted)}
+    .danger{background:#ef4444}
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>🧮 Kopfrechnen</h1>
-    <div>
+    <div class="row">
+      <span id="cfgInfo" class="pill">Konfiguration: —</span>
       <button id="openAdmin" class="secondary">Lehrer-Menü</button>
     </div>
   </header>
 
-  <!-- Schüler-Eingabe (Name/Klasse) – Platzhalter -->
-  <section class="grid">
-    <label><span>Name</span><input id="stName" placeholder="Vorname Nachname"></label>
-    <label><span>Klasse</span><input id="stClass" placeholder="z.B. 5a"></label>
-    <button id="startBtn">Los geht’s</button>
-    <div id="status" style="color:#666"></div>
+  <!-- Schülerbereich -->
+  <section class="card grid" id="studentArea">
+    <div class="hint">Bitte Name & Klasse eingeben. (Die Aufgabeneinstellungen werden zentral von der Lehrkraft vorgegeben.)</div>
+    <div class="grid" style="grid-template-columns:1fr;gap:12px">
+      <label><span>Name</span><input id="stName" placeholder="Vorname Nachname" autocomplete="name"></label>
+      <label><span>Klasse</span><input id="stClass" placeholder="z. B. 5a"></label>
+    </div>
+    <div class="row">
+      <button id="startBtn">Los geht’s</button>
+      <button id="sendExample" class="ghost">Test-Upload</button>
+      <span id="status" class="hint"></span>
+    </div>
   </section>
 
-  <!-- Lehrer-Dialog (mit Dashboard öffnen) -->
+  <!-- Lehrer-Dialog -->
   <dialog id="adminDlg">
-    <form method="dialog" id="adminForm" style="min-width: min(92vw, 680px);">
-      <header style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px;">
-        <h3 style="margin:0;">Lehrer-Einstellungen</h3>
-        <button id="adminClose" value="cancel" type="submit">Schließen</button>
+    <form method="dialog" id="adminForm" style="min-width:min(92vw,740px);">
+      <header class="row" style="justify-content:space-between;margin-bottom:8px">
+        <h3 style="margin:0">Lehrer-Einstellungen</h3>
+        <button id="adminClose" value="cancel" type="submit" class="secondary">Schließen</button>
       </header>
 
       <section class="grid">
-        <!-- Admin-PIN -->
-        <label>
-          <span>Admin-PIN</span>
-          <input id="adminPin" type="password" inputmode="numeric" autocomplete="current-password"
-                 placeholder="PIN eingeben" required />
-        </label>
+        <!-- Admin + Toolbar -->
+        <div class="card">
+          <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
+            <label><span>Admin-PIN</span><input id="adminPin" type="password" inputmode="numeric" placeholder="PIN eingeben" required></label>
+            <div class="toolbar">
+              <button id="adminLoad" type="button" class="secondary">Konfiguration laden</button>
+              <button id="adminSave" type="button">Speichern</button>
+              <button id="adminOpenDashboard" type="button" class="ghost">Dashboard öffnen</button>
+            </div>
+          </div>
+          <div class="hint" id="adminMsg"></div>
+        </div>
 
-        <!-- Beispiel-Konfigfelder (kannst du anpassen/erweitern) -->
-        <label><span>Anzahl Aufgaben (count)</span><input id="cfgCount" type="number" min="1" max="50" value="12"></label>
-        <label><span>Zahlenbereich min</span><input id="cfgMin" type="number" value="1"></label>
-        <label><span>Zahlenbereich max</span><input id="cfgMax" type="number" value="150"></label>
-        <label><span>Rechenarten (ops, Komma-getrennt aus +,-,*,/)</span><input id="cfgOps" value="+,-,*,/"></label>
-        <label><span>Negative Ergebnisse erlauben</span>
-          <select id="cfgNeg"><option value="false">nein</option><option value="true">ja</option></select>
-        </label>
-        <label><span>Division nur ganzzahlig</span>
-          <select id="cfgDivInt"><option value="true">ja</option><option value="false">nein</option></select>
-        </label>
+        <!-- Rechenoptionen (anklickbar) -->
+        <div class="card">
+          <div class="row" style="justify-content:space-between">
+            <strong>Rechenarten</strong>
+            <span class="hint">Tippe, um auszuwählen</span>
+          </div>
+          <div id="opsChips" class="ops">
+            <div class="chip" data-op="+">+</div>
+            <div class="chip" data-op="-">−</div>
+            <div class="chip" data-op="*">×</div>
+            <div class="chip" data-op="/">÷</div>
+          </div>
+        </div>
+
+        <!-- Zahlenbereich & weitere Optionen -->
+        <div class="card grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+          <label><span>Anzahl Aufgaben</span><input id="cfgCount" type="number" min="1" max="200" value="12"></label>
+          <label><span>Min</span><input id="cfgMin" type="number" value="1"></label>
+          <label><span>Max</span><input id="cfgMax" type="number" value="150"></label>
+          <label><span>Multiplikations-Max (×)</span><input id="cfgMultMax" type="number" value="12"></label>
+          <label><span>Divisions-Max (÷)</span><input id="cfgDivMax" type="number" value="12"></label>
+          <label class="row" style="justify-content:flex-start"><input id="cfgNeg" type="checkbox"> negative Ergebnisse erlauben</label>
+          <label class="row" style="justify-content:flex-start"><input id="cfgDivInt" type="checkbox" checked> Division nur ganzzahlig</label>
+        </div>
       </section>
 
       <footer class="foot">
-        <button id="adminSave" type="button">Speichern</button>
-        <button id="adminOpenDashboard" type="button" class="secondary">Dashboard öffnen</button>
+        <button id="adminSave2" type="button">Speichern</button>
+        <button id="adminOpenDashboard2" type="button" class="ghost">Dashboard öffnen</button>
         <button id="adminClose2" type="submit" value="cancel" class="secondary">Schließen</button>
       </footer>
     </form>
@@ -74,91 +119,157 @@
 </div>
 
 <script>
-  // ======= KONFIGURATION =======
-  // Trage hier deine /exec-URL ein:
+  // === SERVER CONFIG ===
+  // TODO: Hier deine Google Apps Script /exec URL eintragen:
   const SERVER_URL = 'https://script.google.com/macros/s/AKfycbyxxdBXI5et69kTRQWgSZdmFYCwVfJzZZwkg-X__dO5VKSdjwmZxnK3lwtS3iaOgMYTZA/exec';
 
+  // === Helpers ===
   const S = (id)=>document.getElementById(id);
+  const qs = (sel,root=document)=>root.querySelector(sel);
+  const qsa = (sel,root=document)=>Array.from(root.querySelectorAll(sel));
 
-  // Lehrer-Menü öffnen
+  // === UI Bindings ===
   S('openAdmin').addEventListener('click', ()=> S('adminDlg').showModal());
   S('adminClose').addEventListener('click', ()=> S('adminDlg').close());
   S('adminClose2').addEventListener('click', ()=> S('adminDlg').close());
 
-  // Admin: Speichern (CORS-frei, per form-url-encoded)
-  S('adminSave').addEventListener('click', async ()=>{
-    const pin = S('adminPin').value.trim();
-    if (!pin){ alert('Bitte PIN eingeben'); return; }
+  // Chips: Rechenarten toggeln
+  const opsChips = S('opsChips');
+  opsChips.addEventListener('click', (e)=>{
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    chip.classList.toggle('active');
+  });
 
-    const cfg = {
+  // Build cfg from form
+  function readConfigFromForm(){
+    const ops = qsa('.chip.active', opsChips).map(c=>c.dataset.op);
+    return {
       count: Number(S('cfgCount').value || 12),
+      ops: ops.length ? ops : ['+'], // Fallback auf + falls nichts gewählt
       min: Number(S('cfgMin').value || 1),
       max: Number(S('cfgMax').value || 150),
-      ops: (S('cfgOps').value || '+,-,*,/').split(',').map(s=>s.trim()).filter(Boolean),
-      allowNeg: S('cfgNeg').value === 'true',
-      divInt: S('cfgDivInt').value === 'true'
+      multMax: Number(S('cfgMultMax').value || 12),
+      divMax: Number(S('cfgDivMax').value || 12),
+      allowNeg: !!S('cfgNeg').checked,
+      divInt: !!S('cfgDivInt').checked
     };
+  }
 
-    const form = new URLSearchParams();
-    form.set('type', 'config_form');
-    form.set('admin_key', pin);
-    form.set('cfg', JSON.stringify(cfg));
+  // Set form from cfg
+  function writeFormFromConfig(cfg){
+    S('cfgCount').value   = cfg.count ?? 12;
+    S('cfgMin').value     = cfg.min ?? 1;
+    S('cfgMax').value     = cfg.max ?? 150;
+    S('cfgMultMax').value = cfg.multMax ?? 12;
+    S('cfgDivMax').value  = cfg.divMax ?? 12;
+    S('cfgNeg').checked   = !!cfg.allowNeg;
+    S('cfgDivInt').checked= cfg.divInt !== false;
 
-    try {
-      const res = await fetch(SERVER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: form.toString()
+    // Chips setzen
+    const set = new Set((cfg.ops || ['+','-','*','/']).map(String));
+    qsa('.chip', opsChips).forEach(ch=>{
+      ch.classList.toggle('active', set.has(ch.dataset.op));
+    });
+  }
+
+  // Lehrer: Konfiguration laden (GET action=config)
+  async function loadConfig(){
+    try{
+      S('adminMsg').textContent = 'Lade Konfiguration …';
+      const res = await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`);
+      const js = await res.json();
+      if (!js.ok) throw new Error(js.error || 'Antwort ungültig');
+      writeFormFromConfig(js.config || {});
+      S('adminMsg').textContent = 'Konfiguration geladen.';
+      S('cfgInfo').textContent  = `Konfiguration: ${js.config?.count ?? '–'} Aufgaben, Ops: ${(js.config?.ops||[]).join(' ') || '—'}`;
+    }catch(e){
+      S('adminMsg').textContent = 'Fehler: ' + e.message;
+    }
+  }
+
+  // Lehrer: Konfiguration speichern (POST form-url-encoded)
+  async function saveConfig(){
+    const pin = (S('adminPin').value || '').trim();
+    if (!pin){ alert('Bitte Admin-PIN eingeben'); return; }
+    const cfg = readConfigFromForm();
+
+    const body = new URLSearchParams();
+    body.set('type','config_form');
+    body.set('admin_key', pin);
+    body.set('cfg', JSON.stringify(cfg));
+
+    try{
+      S('adminMsg').textContent = 'Speichere …';
+      const res = await fetch(SERVER_URL, { method:'POST',
+        headers: { 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: body.toString()
       });
       const txt = await res.text();
-      if (txt.trim() === 'OK'){ alert('Konfiguration gespeichert.'); }
-      else { alert('Unerwartete Antwort: ' + txt); }
-    } catch (e) {
-      alert('Fehler beim Speichern: ' + e.message);
+      if (txt.trim()!=='OK') throw new Error(txt);
+      S('adminMsg').textContent = 'Gespeichert.';
+      S('cfgInfo').textContent  = `Konfiguration: ${cfg.count} Aufgaben, Ops: ${cfg.ops.join(' ')}`;
+    }catch(e){
+      S('adminMsg').textContent = 'Fehler beim Speichern: ' + e.message;
     }
-  });
+  }
 
-  // Admin: Dashboard öffnen (PIN-geschützt)
-  S('adminOpenDashboard').addEventListener('click', ()=>{
-    const pin = (S('adminPin')?.value || '').trim();
-    if (!pin){ alert('Bitte zuerst die Admin-PIN eingeben.'); return; }
-    const url = `${SERVER_URL}?action=dashboard&admin_key=${encodeURIComponent(pin)}`;
-    window.open(url, '_blank', 'noopener');
-  });
+  // Buttons binden
+  S('adminLoad').addEventListener('click', loadConfig);
+  S('adminSave').addEventListener('click', saveConfig);
+  S('adminSave2').addEventListener('click', saveConfig);
 
-  // ======= Schüler-App – Minimal (Platzhalter) =======
-  S('startBtn').addEventListener('click', async ()=>{
-    const name = S('stName').value.trim();
-    const group= S('stClass').value.trim();
-    if (!name || !group) { alert('Bitte Name und Klasse eintragen'); return; }
+  // Dashboard öffnen mit PIN
+  function openDashboard(){
+    const pin = (S('adminPin').value || '').trim();
+    if (!pin){ alert('Bitte Admin-PIN eingeben'); return; }
+    window.open(`${SERVER_URL}?action=dashboard&admin_key=${encodeURIComponent(pin)}`, '_blank', 'noopener');
+  }
+  S('adminOpenDashboard').addEventListener('click', openDashboard);
+  S('adminOpenDashboard2').addEventListener('click', openDashboard);
 
-    // Beispiel-Run (hier würdest du deine Aufgaben generieren & messen)
-    // Wir senden nur einen "Fake" Datensatz als Beispiel:
+  // ==== Schüler-Demo ====
+  // Hier würdest du deinen eigentlichen Trainer starten.
+  // Für die GitHub-Demo gibt es einen "Test-Upload" und eine vereinfachte "Los geht's"-Aktion.
+  let sending = false;
+
+  S('sendExample').addEventListener('click', async ()=>{
+    if (sending) return; sending = true;
+    S('status').textContent = 'Sende Test-Datensatz …';
     const payload = {
-      run_id: 'run-' + Date.now(),
-      name, group,
+      run_id: 'demo-' + Date.now(),
+      name: S('stName').value.trim() || 'Demo Schüler',
+      group: S('stClass').value.trim() || 'Demo',
       total: 12,
-      correct: 10,
-      time: 75.3,  // Gesamtzeit in s
-      score: 103
+      correct: 9,
+      time: 63.2,
+      score: 95
     };
-
-    try {
-      const res = await fetch(SERVER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json' },
-        body: JSON.stringify(payload)
-      });
+    try{
+      const res = await fetch(SERVER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
       const js = await res.json();
-      if (js.ok) {
-        S('status').textContent = 'Ergebnis gesendet. Danke!';
-      } else {
-        S('status').textContent = 'Fehler: ' + (js.error || 'unbekannt');
-      }
-    } catch (e) {
-      S('status').textContent = 'Netzwerkfehler: ' + e.message;
-    }
+      if (js.ok) S('status').textContent = 'Test-Ergebnis gesendet.';
+      else S('status').textContent = 'Fehler: ' + (js.error || 'unbekannt');
+    }catch(e){ S('status').textContent = 'Netzwerkfehler: ' + e.message; }
+    finally{ sending=false; }
   });
+
+  S('startBtn').addEventListener('click', ()=>{
+    const name  = S('stName').value.trim();
+    const group = S('stClass').value.trim();
+    if (!name || !group){ alert('Bitte Name & Klasse eingeben'); return; }
+    // Hier deinen echten Trainer starten…
+    alert(`Starte Trainer für ${name} (${group}).\nDie Aufgabenparameter kommen aus der zentralen Konfiguration.`);
+  });
+
+  // Beim Laden einmal Config anzeigen (optional)
+  (async ()=>{
+    try{
+      const res = await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`);
+      const js  = await res.json();
+      if (js.ok) S('cfgInfo').textContent = `Konfiguration: ${js.config?.count ?? '–'} Aufgaben, Ops: ${(js.config?.ops||[]).join(' ') || '—'}`;
+    }catch(e){ /* still ok */ }
+  })();
 </script>
 </body>
 </html>
