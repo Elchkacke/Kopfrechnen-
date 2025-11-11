@@ -175,20 +175,29 @@
 
   // Lehrer: Konfiguration laden (GET action=config)
   async function loadConfig(){
+    const msg = S('adminMsg');
+    msg.textContent = 'Lade Konfiguration …';
     try{
-      S('adminMsg').textContent = 'Lade Konfiguration …';
-      const res = await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`);
-      const js = await res.json();
-      if (!js.ok) throw new Error(js.error || 'Antwort ungültig');
+      const url = `${SERVER_URL}?action=config&t=${Date.now()}`;
+      const res = await fetch(url);
+      const text = await res.text();        // zuerst Text lesen (falls HTML-Fehler)
+      let js;
+      try { js = JSON.parse(text); } catch { js = null; }
+      if (!res.ok) throw new Error(`HTTP ${res.status} – ${text.slice(0,200)}`);
+      if (!js || js.ok !== true) {
+        throw new Error(js && js.error ? js.error : `Ungültige Antwort: ${text.slice(0,200)}`);
+      }
       writeFormFromConfig(js.config || {});
-      S('adminMsg').textContent = 'Konfiguration geladen.';
+      msg.textContent = 'Konfiguration geladen.';
       S('cfgInfo').textContent  = `Konfiguration: ${js.config?.count ?? '–'} Aufgaben, Ops: ${(js.config?.ops||[]).join(' ') || '—'}`;
     }catch(e){
-      S('adminMsg').textContent = 'Fehler: ' + e.message;
+      msg.innerHTML = 'Fehler beim Laden: ' + e.message +
+        '<br><span class="hint">Tipp: Öffne im Browser ' +
+        '<code>?action=init_config</code> einmal, falls der Config-Tab noch fehlt.</span>';
     }
   }
 
-  // Lehrer: Konfiguration speichern (POST form-url-encoded)
+  // --- Speichern der Konfig (POST form-url-encoded) mit PIN & klaren Fehlern ---
   async function saveConfig(){
     const pin = (S('adminPin').value || '').trim();
     if (!pin){ alert('Bitte Admin-PIN eingeben'); return; }
@@ -199,25 +208,30 @@
     body.set('admin_key', pin);
     body.set('cfg', JSON.stringify(cfg));
 
+    const msg = S('adminMsg');
+    msg.textContent = 'Speichere …';
     try{
-      S('adminMsg').textContent = 'Speichere …';
-      const res = await fetch(SERVER_URL, { method:'POST',
+      const res  = await fetch(SERVER_URL, {
+        method: 'POST',
         headers: { 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8' },
         body: body.toString()
       });
-      const txt = await res.text();
-      if (txt.trim()!=='OK') throw new Error(txt);
-      S('adminMsg').textContent = 'Gespeichert.';
+      const text = await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status} – ${text.slice(0,200)}`);
+      if (text.trim() !== 'OK') throw new Error(`Unerwartete Antwort: ${text.slice(0,200)}`);
+      msg.textContent = 'Gespeichert.';
       S('cfgInfo').textContent  = `Konfiguration: ${cfg.count} Aufgaben, Ops: ${cfg.ops.join(' ')}`;
     }catch(e){
-      S('adminMsg').textContent = 'Fehler beim Speichern: ' + e.message;
+      // Häufigste Ursache: falsche PIN → "Unauthorized"
+      msg.innerHTML = 'Fehler beim Speichern: ' + e.message +
+        '<br><span class="hint">Prüfe Admin-PIN und ob die Web-App mit "Jeder, auch anonym" veröffentlicht ist.</span>';
     }
   }
 
-  // Buttons binden
-  S('adminLoad').addEventListener('click', loadConfig);
-  S('adminSave').addEventListener('click', saveConfig);
-  S('adminSave2').addEventListener('click', saveConfig);
+  // Buttons neu binden (falls noch nicht)
+  S('adminLoad').onclick  = loadConfig;
+  S('adminSave').onclick  = saveConfig;
+  S('adminSave2').onclick = saveConfig;
 
   // Dashboard öffnen mit PIN
   function openDashboard(){
