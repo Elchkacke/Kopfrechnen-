@@ -1,190 +1,300 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Kopfrechnen Trainer</title>
-<style>
-body {font-family: system-ui, sans-serif; background:#f6f6f6; margin:0; padding:2em; text-align:center;}
-h1 {margin-top:0;}
-input,button {font-size:1.2em; padding:0.4em;}
-input {border:1px solid #ccc; border-radius:6px;}
-button {border:none; border-radius:8px; cursor:pointer;}
-button.primary {background:#007bff; color:white;}
-#cfgInfo {margin:1em 0; color:#333;}
-#adminDlg {border:none; border-radius:12px; padding:1em; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,0.3);}
-.chip {display:inline-block; border:1px solid #aaa; border-radius:20px; padding:0.3em 0.8em; margin:0.2em; cursor:pointer;}
-.chip.active {background:#007bff; color:#fff;}
-.hint {font-size:0.8em; color:#777;}
-</style>
+  <meta charset="UTF-8">
+  <title>Kopfrechnen Trainer – Einfach</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:#f4f4f5;
+      margin:0;
+      padding:16px;
+      text-align:center;
+    }
+    .card {
+      max-width:600px;
+      margin:0 auto;
+      background:white;
+      border-radius:12px;
+      padding:16px;
+      box-shadow:0 2px 8px rgba(0,0,0,0.06);
+    }
+    h1 { margin-top:0; }
+    input {
+      font-size:16px;
+      padding:8px;
+      width:100%;
+      max-width:260px;
+      border-radius:8px;
+      border:1px solid #d4d4d8;
+      margin:4px 0 10px;
+    }
+    button {
+      font-size:16px;
+      padding:8px 16px;
+      border-radius:999px;
+      border:none;
+      cursor:pointer;
+      margin:4px;
+    }
+    button.primary { background:#2563eb; color:white; }
+    button.secondary { background:#e4e4e7; color:#111827; }
+    #taskBox {
+      margin-top:16px;
+      padding:12px;
+      border-radius:12px;
+      background:#f9fafb;
+      display:none;
+    }
+    #resultBox {
+      margin-top:16px;
+      padding:12px;
+      border-radius:12px;
+      background:#ecfdf3;
+      display:none;
+    }
+    .label { font-weight:600; }
+    #status { margin-top:8px; font-size:14px; color:#4b5563; }
+  </style>
 </head>
-
 <body>
-  <h1>Kopfrechnen Trainer</h1>
+  <div class="card">
+    <h1>🧮 Kopfrechnen Trainer</h1>
 
-  <div id="cfgInfo">Konfiguration: wird geladen …</div>
-
-  <div>
-    <label>Name:<br><input id="stName" placeholder="Vorname Nachname"></label><br><br>
-    <label>Klasse:<br><input id="stClass" placeholder="z. B. 5a"></label><br><br>
-    <button id="startBtn" class="primary">Los geht’s</button>
-    <button id="sendExample">Test-Upload</button>
-  </div>
-
-  <p id="status"></p>
-
-  <button id="openAdmin">⚙️ Lehrer-Einstellungen</button>
-
-  <!-- Lehrer-Dialog -->
-  <dialog id="adminDlg">
-    <h3>Lehrer-Einstellungen</h3>
-    <label>Admin-PIN:<br>
-      <input type="password" id="adminPin" placeholder="PIN eingeben">
-    </label>
-    <p id="adminMsg" class="hint"></p>
-    <button id="adminLoad">Konfiguration laden</button>
-    <button id="adminSave" class="primary">Speichern</button>
-    <button id="openDash">Dashboard öffnen</button>
-    <hr>
-    <div>
-      <div id="opsChips">
-        <span class="chip" data-op="+">+</span>
-        <span class="chip" data-op="-">−</span>
-        <span class="chip" data-op="*">×</span>
-        <span class="chip" data-op="/">÷</span>
+    <!-- Startbereich: Name & Klasse -->
+    <div id="startBox">
+      <p>Bitte Name und Klasse eingeben:</p>
+      <div>
+        <div class="label">Name</div>
+        <input id="inpName" placeholder="Vorname Nachname">
       </div>
       <div>
-        <label>Anzahl Aufgaben: <input id="cfgCount" type="number" min="1" max="100" value="12"></label><br>
-        <label>Min: <input id="cfgMin" type="number" value="1"></label><br>
-        <label>Max: <input id="cfgMax" type="number" value="150"></label><br>
-        <label>Multiplikations-Max (×): <input id="cfgMultMax" type="number" value="12"></label><br>
-        <label>Divisions-Max (÷): <input id="cfgDivMax" type="number" value="12"></label><br>
-        <label><input id="cfgNeg" type="checkbox"> Negative Ergebnisse erlauben</label><br>
-        <label><input id="cfgDivInt" type="checkbox" checked> Division nur ganzzahlig</label>
+        <div class="label">Klasse</div>
+        <input id="inpClass" placeholder="z. B. 5a">
       </div>
+      <button id="btnStart" class="primary">Los geht’s</button>
     </div>
-    <br>
-    <button id="adminSave2" class="primary">Speichern</button>
-    <button onclick="document.getElementById('adminDlg').close()">Schließen</button>
-  </dialog>
 
-  <!-- ==================== SCRIPT ==================== -->
+    <!-- Aufgabenbereich -->
+    <div id="taskBox">
+      <div id="taskHeader" class="label"></div>
+      <div id="taskText" style="font-size:26px; margin:12px 0;"></div>
+      <div>
+        <div>Deine Antwort:</div>
+        <input id="inpAnswer" type="number" inputmode="decimal">
+      </div>
+      <button id="btnNext" class="primary">Weiter</button>
+      <button id="btnAbort" class="secondary">Abbrechen</button>
+    </div>
+
+    <!-- Ergebnisbereich -->
+    <div id="resultBox">
+      <h3>Auswertung</h3>
+      <div id="resultText"></div>
+      <div id="status"></div>
+      <button id="btnRestart" class="secondary">Neue Runde</button>
+    </div>
+  </div>
+
   <script>
-    /* === HIER DEINE GOOGLE WEB-APP-URL EINTRAGEN === */
-    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbzN4QXyWasde6Qums9SCtSLFi3p9c6WtAwiicLGxMk3WF68aQzERGqFiEHwVGqtPCtxTg/exec';
+    /********** 1. SERVER-URL EINTRAGEN **********/
+    // <-- HIER deine Apps-Script-Web-App-URL eintragen (mit /exec am Ende)
+    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxxZI85PD70rdlnxLFXOwiGe_tcLVu1NCRaP-wWlncKzhNTFyg3aCHARYCnNFj_8CPkSg/exec';
 
-    const S=id=>document.getElementById(id);
-    const QA=(sel,root=document)=>Array.from(root.querySelectorAll(sel));
+    /********** 2. Feste Einstellungen **********/
+    const CONFIG = {
+      count: 10,               // Anzahl Aufgaben
+      min: 1,                  // kleinste Zahl
+      max: 150,                // größte Zahl
+      ops: ['+','-','*','/'],  // erlaubte Rechenarten
+      allowNeg: false,         // negative Ergebnisse erlauben?
+      divInt: true             // Division nur mit ganzzahligem Ergebnis?
+    };
 
-    /* Globale Config */
-    let CURRENT_CFG = {count:12,ops:['+','-','*','/'],min:1,max:150,multMax:12,divMax:12,allowNeg:false,divInt:true};
+    /********** 3. Hilfsfunktionen **********/
+    const S = id => document.getElementById(id);
 
-    /* Form lesen/schreiben */
-    function readCfg(){
-      const ops=QA('.chip.active').map(c=>c.dataset.op);
-      return {
-        count:+S('cfgCount').value||12, ops:ops.length?ops:['+'],
-        min:+S('cfgMin').value||1, max:+S('cfgMax').value||150,
-        multMax:+S('cfgMultMax').value||12, divMax:+S('cfgDivMax').value||12,
-        allowNeg:S('cfgNeg').checked, divInt:S('cfgDivInt').checked
+    function randInt(a,b){
+      return Math.floor(Math.random() * (b - a + 1)) + a;
+    }
+
+    function generateTask(){
+      const op = CONFIG.ops[Math.floor(Math.random() * CONFIG.ops.length)];
+      let a, b, erg;
+
+      if (op === '+') {
+        a = randInt(CONFIG.min, CONFIG.max);
+        b = randInt(CONFIG.min, CONFIG.max);
+        erg = a + b;
+      } else if (op === '-') {
+        a = randInt(CONFIG.min, CONFIG.max);
+        b = randInt(CONFIG.min, CONFIG.max);
+        erg = a - b;
+        if (!CONFIG.allowNeg && erg < 0) {
+          const tmp = a; a = b; b = tmp;
+          erg = a - b;
+        }
+      } else if (op === '*') {
+        a = randInt(1, 12);
+        b = randInt(1, 12);
+        erg = a * b;
+      } else if (op === '/') {
+        if (CONFIG.divInt) {
+          b = randInt(1, 12);
+          erg = randInt(1, 12);
+          a = b * erg;
+        } else {
+          b = randInt(1, 12);
+          a = randInt(1, 144);
+          erg = a / b;
+        }
+      }
+      return { a, b, op, erg };
+    }
+
+    /********** 4. Zustand **********/
+    let currentIndex = 0;
+    let tasks = [];
+    let answers = [];
+    let startTime = null;
+    let studentName = '';
+    let studentClass = '';
+
+    /********** 5. UI-Steuerung **********/
+    function showStart(){
+      S('startBox').style.display = 'block';
+      S('taskBox').style.display = 'none';
+      S('resultBox').style.display = 'none';
+      S('status').textContent = '';
+    }
+
+    function showTask(){
+      S('startBox').style.display = 'none';
+      S('taskBox').style.display = 'block';
+      S('resultBox').style.display = 'none';
+
+      const t = tasks[currentIndex];
+      S('taskHeader').textContent = 'Aufgabe ' + (currentIndex + 1) + ' von ' + CONFIG.count;
+      S('taskText').textContent = t.a + ' ' + t.op + ' ' + t.b + ' = ?';
+      S('inpAnswer').value = '';
+      S('inpAnswer').focus();
+    }
+
+    function showResult(){
+      S('startBox').style.display = 'none';
+      S('taskBox').style.display = 'none';
+      S('resultBox').style.display = 'block';
+
+      let correct = 0;
+      let detail = '';
+      for (let i = 0; i < tasks.length; i++) {
+        const t = tasks[i];
+        const userAns = answers[i];
+        const ok = Math.abs(userAns - t.erg) < 0.0001;
+        if (ok) correct++;
+        detail +=
+          (i+1) + '. ' +
+          t.a + ' ' + t.op + ' ' + t.b +
+          ' = ' + t.erg +
+          ' (deine Antwort: ' + userAns + (ok ? ' ✓' : ' ✗') + ')<br>';
+      }
+
+      const total = tasks.length;
+      const durationSec = (Date.now() - startTime) / 1000;
+      const pct = total > 0 ? (correct / total * 100).toFixed(1) : '0.0';
+
+      S('resultText').innerHTML =
+        '<p>' + studentName + ' (' + studentClass + ')</p>' +
+        '<p>Richtig: ' + correct + ' von ' + total + ' (' + pct + '%)</p>' +
+        '<p>Gesamtzeit: ' + durationSec.toFixed(1) + ' s (Ø ' +
+        (durationSec/total).toFixed(2) + ' s pro Aufgabe)</p>' +
+        '<hr>' + detail;
+
+      sendResults(total, correct, durationSec);
+    }
+
+    /********** 6. Ergebnisse an Google senden **********/
+    async function sendResults(total, correct, timeSec){
+      S('status').textContent = 'Sende Ergebnisse …';
+      const payload = {
+        run_id: 'run-' + Date.now(),
+        name: studentName,
+        group: studentClass,
+        total: total,
+        correct: correct,
+        time: timeSec,
+        score: correct * 10   // einfache Score-Logik
       };
-    }
-    function writeCfg(c){
-      if(!c)return;
-      S('cfgCount').value=c.count??12;
-      S('cfgMin').value=c.min??1; S('cfgMax').value=c.max??150;
-      S('cfgMultMax').value=c.multMax??12; S('cfgDivMax').value=c.divMax??12;
-      S('cfgNeg').checked=!!c.allowNeg; S('cfgDivInt').checked=c.divInt!==false;
-      const sel=new Set((c.ops||['+','-','*','/']).map(String));
-      QA('.chip').forEach(ch=>ch.classList.toggle('active',sel.has(ch.dataset.op)));
-    }
-    function showCfgInfo(c){
-      S('cfgInfo').textContent=`Konfiguration: ${c.count} Aufgaben, Ops: ${(c.ops||[]).join(' ')}`;
-    }
-
-    /* Chips klicken */
-    S('opsChips').addEventListener('click',e=>{
-      const chip=e.target.closest('.chip'); if(chip)chip.classList.toggle('active');
-    });
-
-    /* Laden */
-    async function loadConfig(){
-      const msg=S('adminMsg'); msg.textContent='Lade Konfiguration …';
-      try{
-        const r=await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`,{cache:'no-store'});
-        const txt=await r.text();
-        const js=JSON.parse(txt);
-        if(!js.ok)throw new Error(js.error||'Fehlerhafte Antwort');
-        CURRENT_CFG=js.config; writeCfg(CURRENT_CFG); showCfgInfo(CURRENT_CFG);
-        msg.textContent='Konfiguration geladen.';
-      }catch(e){
-        msg.textContent='Load failed: '+e.message;
-        console.error(e);
+      try {
+        const res = await fetch(SERVER_URL, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const js = await res.json();
+        if (js.ok) {
+          S('status').textContent = 'Ergebnisse wurden gespeichert.';
+        } else {
+          S('status').textContent = 'Fehler beim Senden: ' + (js.error || 'unbekannt');
+        }
+      } catch (e) {
+        S('status').textContent = 'Netzwerkfehler: ' + e.message;
       }
     }
 
-    /* Speichern */
-    async function saveConfig(){
-      const msg=S('adminMsg'); msg.textContent='Speichere …';
-      const pin=(S('adminPin').value||'').trim(); if(!pin){alert('PIN fehlt');return;}
-      const cfg=readCfg();
-      try{
-        const body=new URLSearchParams();
-        body.set('type','config_form'); body.set('admin_key',pin);
-        body.set('cfg',JSON.stringify(cfg));
-        const r=await fetch(SERVER_URL,{method:'POST',
-          headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
-          body:body.toString(),cache:'no-store'});
-        const txt=await r.text();
-        if(!r.ok)throw new Error('HTTP '+r.status);
-        if(txt.trim()!=='OK')throw new Error('Antwort: '+txt.slice(0,100));
-        CURRENT_CFG=cfg; showCfgInfo(cfg); msg.textContent='Gespeichert.';
-      }catch(e){ msg.textContent='Save failed: '+e.message; console.error(e); }
-    }
+    /********** 7. Event-Handler **********/
+    S('btnStart').addEventListener('click', () => {
+      studentName = S('inpName').value.trim();
+      studentClass = S('inpClass').value.trim();
+      if (!studentName || !studentClass) {
+        alert('Bitte Name und Klasse eingeben.');
+        return;
+      }
+      tasks = [];
+      answers = [];
+      for (let i = 0; i < CONFIG.count; i++) {
+        tasks.push(generateTask());
+      }
+      currentIndex = 0;
+      startTime = Date.now();
+      showTask();
+    });
 
-    /* Dashboard */
-    function openDashboard(){
-      const pin=(S('adminPin').value||'').trim();
-      if(!pin){alert('PIN fehlt');return;}
-      window.open(`${SERVER_URL}?action=dashboard&admin_key=${encodeURIComponent(pin)}`,'_blank','noopener');
-    }
+    S('btnNext').addEventListener('click', () => {
+      const val = S('inpAnswer').value;
+      if (val === '') {
+        alert('Bitte eine Antwort eingeben.');
+        return;
+      }
+      answers[currentIndex] = Number(val);
+      if (currentIndex < CONFIG.count - 1) {
+        currentIndex++;
+        showTask();
+      } else {
+        showResult();
+      }
+    });
 
-    /* Start */
-    S('startBtn').onclick=async()=>{
-      const name=S('stName').value.trim();
-      const cls=S('stClass').value.trim();
-      if(!name||!cls){alert('Bitte Name & Klasse');return;}
-      if(!CURRENT_CFG)await loadConfig();
-      alert(`Starte Trainer für ${name} (${cls})\n${CURRENT_CFG.count} Aufgaben, Ops: ${CURRENT_CFG.ops.join(' ')}`);
-    };
+    S('btnAbort').addEventListener('click', () => {
+      if (confirm('Willst du wirklich abbrechen?')) {
+        showStart();
+      }
+    });
 
-    /* Test-Upload */
-    S('sendExample').onclick=async()=>{
-      S('status').textContent='Sende Testdaten …';
-      const payload={run_id:'demo-'+Date.now(),name:S('stName').value||'Demo',
-        group:S('stClass').value||'Demo',total:12,correct:9,time:63.2,score:95};
-      try{
-        const r=await fetch(SERVER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
-        const js=await r.json();
-        S('status').textContent=js.ok?'Gesendet.':'Fehler: '+js.error;
-      }catch(e){S('status').textContent='Netzwerkfehler: '+e.message;}
-    };
+    S('btnRestart').addEventListener('click', () => {
+      showStart();
+    });
 
-    /* Events */
-    S('openAdmin').onclick=()=>S('adminDlg').showModal();
-    S('adminLoad').onclick=loadConfig;
-    S('adminSave').onclick=saveConfig;
-    S('adminSave2').onclick=saveConfig;
-    S('openDash').onclick=openDashboard;
+    S('inpAnswer').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        S('btnNext').click();
+      }
+    });
 
-    /* Info beim Start */
-    (async()=>{
-      try{
-        const r=await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`,{cache:'no-store'});
-        const js=await r.json();
-        if(js.ok)CURRENT_CFG=js.config,showCfgInfo(CURRENT_CFG);
-      }catch(_){showCfgInfo(CURRENT_CFG);}
-    })();
+    // Initialzustand
+    showStart();
   </script>
 </body>
 </html>
