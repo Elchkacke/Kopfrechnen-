@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Kopfrechnen Trainer – Einfach</title>
+  <title>Kopfrechnen Trainer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body {
@@ -56,9 +56,71 @@
     }
     .label { font-weight:600; }
     #status { margin-top:8px; font-size:14px; color:#4b5563; }
+
+    /* Lehrer-Menü (einfaches Overlay, kein <dialog>) */
+    #teacherOverlay {
+      position:fixed;
+      inset:0;
+      background:rgba(0,0,0,0.4);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      z-index:999;
+    }
+    #teacherPanel {
+      background:white;
+      border-radius:12px;
+      max-width:420px;
+      width:90%;
+      padding:16px;
+      box-shadow:0 4px 20px rgba(0,0,0,0.3);
+      text-align:left;
+    }
+    #teacherPanel h2 { margin-top:0; text-align:center; }
+    #teacherPanel label { display:block; margin:6px 0 2px; font-size:14px; font-weight:600; }
+    #teacherPanel input[type="number"],
+    #teacherPanel input[type="password"] {
+      width:100%;
+      max-width:none;
+      margin-bottom:6px;
+    }
+    #teacherPanel .row { display:flex; justify-content:space-between; gap:8px; margin-top:10px; }
+    #teacherMsg { font-size:13px; color:#4b5563; margin-top:4px; min-height:18px; }
+    .ops-row { display:flex; gap:8px; margin-top:4px; }
+    .chip {
+      display:inline-block;
+      border-radius:999px;
+      border:1px solid #d4d4d8;
+      padding:4px 10px;
+      cursor:pointer;
+      font-weight:600;
+      user-select:none;
+    }
+    .chip.active {
+      background:#2563eb;
+      color:white;
+      border-color:#2563eb;
+    }
+
+    #topBar {
+      max-width:600px;
+      margin:0 auto 8px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+    #cfgInfo {
+      font-size:13px;
+      color:#4b5563;
+    }
   </style>
 </head>
 <body>
+  <div id="topBar">
+    <div id="cfgInfo">Konfiguration: wird geladen …</div>
+    <button id="btnTeacher" class="secondary">⚙️ Lehrer-Menü</button>
+  </div>
+
   <div class="card">
     <h1>🧮 Kopfrechnen Trainer</h1>
 
@@ -97,30 +159,82 @@
     </div>
   </div>
 
-  <script>
-    /********** 1. SERVER-URL EINTRAGEN **********/
-    // <-- HIER deine Apps-Script-Web-App-URL eintragen (mit /exec am Ende)
-    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxxZI85PD70rdlnxLFXOwiGe_tcLVu1NCRaP-wWlncKzhNTFyg3aCHARYCnNFj_8CPkSg/exec';
+  <!-- Lehrer-Menü Overlay -->
+  <div id="teacherOverlay">
+    <div id="teacherPanel">
+      <h2>Lehrer-Konfiguration</h2>
+      <label for="teacherPin">Lehrer-PIN</label>
+      <input type="password" id="teacherPin" placeholder="PIN eingeben">
 
-    /********** 2. Feste Einstellungen **********/
-    const CONFIG = {
-      count: 10,               // Anzahl Aufgaben
-      min: 1,                  // kleinste Zahl
-      max: 150,                // größte Zahl
-      ops: ['+','-','*','/'],  // erlaubte Rechenarten
-      allowNeg: false,         // negative Ergebnisse erlauben?
-      divInt: true             // Division nur mit ganzzahligem Ergebnis?
+      <label>Anzahl Aufgaben</label>
+      <input type="number" id="cfgCount" min="1" max="200">
+
+      <label>Zahlenbereich (Min / Max)</label>
+      <div class="row">
+        <input type="number" id="cfgMin" placeholder="Min">
+        <input type="number" id="cfgMax" placeholder="Max">
+      </div>
+
+      <label>Rechenarten</label>
+      <div class="ops-row" id="opsRow">
+        <div class="chip" data-op="+">+</div>
+        <div class="chip" data-op="-">−</div>
+        <div class="chip" data-op="*">×</div>
+        <div class="chip" data-op="/">÷</div>
+      </div>
+
+      <label>Multiplikations-Max (×)</label>
+      <input type="number" id="cfgMultMax">
+
+      <label>Divisions-Max (÷)</label>
+      <input type="number" id="cfgDivMax">
+
+      <label><input type="checkbox" id="cfgNeg"> Negative Ergebnisse erlauben</label><br>
+      <label><input type="checkbox" id="cfgDivInt" checked> Division nur ganzzahlig</label>
+
+      <div id="teacherMsg"></div>
+
+      <div class="row" style="margin-top:12px;">
+        <button id="teacherApply" class="primary">Übernehmen</button>
+        <button id="teacherClose" class="secondary">Schließen</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /********** 1. SERVER-URL & LEHRER-PIN **********/
+    // Deine Apps-Script-Web-App-URL:
+    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbz-vghvqrJB1OOSmD-LGlTcb8Be-G1W7T8rvayv4ZD1bfCgDd4O9UhjwFZYh-s0E3_U7w/exec';
+    // Lehrer-PIN für das Menü:
+    const TEACHER_PIN = '1234'; // <- hier ändern, z.B. "4711"
+
+    /********** 2. Feste Einstellungen (Startwerte) **********/
+    let CONFIG = {
+      count: 10,
+      min: 1,
+      max: 150,
+      ops: ['+','-','*','/'],
+      allowNeg: false,
+      divInt: true,
+      multMax: 12,
+      divMax: 12
     };
 
-    /********** 3. Hilfsfunktionen **********/
     const S = id => document.getElementById(id);
 
+    function updateCfgInfo(){
+      const opsText = (CONFIG.ops && CONFIG.ops.length) ? CONFIG.ops.join(' ') : '—';
+      S('cfgInfo').textContent = `Konfiguration: ${CONFIG.count} Aufgaben, Bereich ${CONFIG.min}–${CONFIG.max}, Ops: ${opsText}`;
+    }
+
+    /********** 3. Aufgaben-Generator **********/
     function randInt(a,b){
       return Math.floor(Math.random() * (b - a + 1)) + a;
     }
 
     function generateTask(){
-      const op = CONFIG.ops[Math.floor(Math.random() * CONFIG.ops.length)];
+      const ops = CONFIG.ops && CONFIG.ops.length ? CONFIG.ops : ['+'];
+      const op = ops[Math.floor(Math.random() * ops.length)];
       let a, b, erg;
 
       if (op === '+') {
@@ -136,24 +250,29 @@
           erg = a - b;
         }
       } else if (op === '*') {
-        a = randInt(1, 12);
-        b = randInt(1, 12);
+        a = randInt(1, CONFIG.multMax || 12);
+        b = randInt(1, CONFIG.multMax || 12);
         erg = a * b;
       } else if (op === '/') {
         if (CONFIG.divInt) {
-          b = randInt(1, 12);
-          erg = randInt(1, 12);
+          b = randInt(1, CONFIG.divMax || 12);
+          erg = randInt(1, CONFIG.divMax || 12);
           a = b * erg;
         } else {
-          b = randInt(1, 12);
-          a = randInt(1, 144);
+          b = randInt(1, CONFIG.divMax || 12);
+          a = randInt(1, (CONFIG.divMax || 12) * (CONFIG.divMax || 12));
           erg = a / b;
         }
+      } else {
+        // Fallback: Addition
+        a = randInt(CONFIG.min, CONFIG.max);
+        b = randInt(CONFIG.min, CONFIG.max);
+        erg = a + b;
       }
       return { a, b, op, erg };
     }
 
-    /********** 4. Zustand **********/
+    /********** 4. Zustände **********/
     let currentIndex = 0;
     let tasks = [];
     let answers = [];
@@ -161,7 +280,7 @@
     let studentName = '';
     let studentClass = '';
 
-    /********** 5. UI-Steuerung **********/
+    /********** 5. UI-Funktionen **********/
     function showStart(){
       S('startBox').style.display = 'block';
       S('taskBox').style.display = 'none';
@@ -214,7 +333,7 @@
       sendResults(total, correct, durationSec);
     }
 
-    /********** 6. Ergebnisse an Google senden **********/
+    /********** 6. Ergebnisse senden **********/
     async function sendResults(total, correct, timeSec){
       S('status').textContent = 'Sende Ergebnisse …';
       const payload = {
@@ -224,7 +343,7 @@
         total: total,
         correct: correct,
         time: timeSec,
-        score: correct * 10   // einfache Score-Logik
+        score: correct * 10
       };
       try {
         const res = await fetch(SERVER_URL, {
@@ -243,7 +362,7 @@
       }
     }
 
-    /********** 7. Event-Handler **********/
+    /********** 7. Schüler-Events **********/
     S('btnStart').addEventListener('click', () => {
       studentName = S('inpName').value.trim();
       studentClass = S('inpClass').value.trim();
@@ -293,8 +412,72 @@
       }
     });
 
-    // Initialzustand
+    /********** 8. Lehrer-Menü (nur lokal, mit PIN) **********/
+    const overlay = S('teacherOverlay');
+    const opsRow = S('opsRow');
+    function openTeacher(){
+      // Form mit aktuellem CONFIG füllen
+      S('cfgCount').value = CONFIG.count;
+      S('cfgMin').value   = CONFIG.min;
+      S('cfgMax').value   = CONFIG.max;
+      S('cfgMultMax').value = CONFIG.multMax;
+      S('cfgDivMax').value  = CONFIG.divMax;
+      S('cfgNeg').checked   = CONFIG.allowNeg;
+      S('cfgDivInt').checked = CONFIG.divInt;
+      // Chips setzen
+      const set = new Set((CONFIG.ops || ['+']).map(String));
+      Array.from(opsRow.querySelectorAll('.chip')).forEach(ch=>{
+        ch.classList.toggle('active', set.has(ch.dataset.op));
+      });
+      S('teacherMsg').textContent = '';
+      S('teacherPin').value = '';
+      overlay.style.display = 'flex';
+    }
+    function closeTeacher(){
+      overlay.style.display = 'none';
+    }
+
+    S('btnTeacher').addEventListener('click', openTeacher);
+    S('teacherClose').addEventListener('click', closeTeacher);
+    overlay.addEventListener('click', (e)=>{
+      if (e.target === overlay) closeTeacher();
+    });
+
+    opsRow.addEventListener('click', (e)=>{
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      chip.classList.toggle('active');
+    });
+
+    S('teacherApply').addEventListener('click', ()=>{
+      const pin = S('teacherPin').value.trim();
+      if (pin !== TEACHER_PIN) {
+        S('teacherMsg').textContent = 'Falsche PIN.';
+        return;
+      }
+      const newCfg = {
+        count: Number(S('cfgCount').value || CONFIG.count),
+        min: Number(S('cfgMin').value || CONFIG.min),
+        max: Number(S('cfgMax').value || CONFIG.max),
+        multMax: Number(S('cfgMultMax').value || CONFIG.multMax),
+        divMax: Number(S('cfgDivMax').value || CONFIG.divMax),
+        allowNeg: !!S('cfgNeg').checked,
+        divInt: !!S('cfgDivInt').checked,
+        ops: []
+      };
+      const activeOps = Array.from(opsRow.querySelectorAll('.chip.active')).map(ch=>ch.dataset.op);
+      newCfg.ops = activeOps.length ? activeOps : ['+'];
+
+      CONFIG = newCfg;
+      updateCfgInfo();
+      S('teacherMsg').textContent = 'Konfiguration übernommen.';
+      setTimeout(closeTeacher, 700);
+    });
+
+    // Startzustand
+    updateCfgInfo();
     showStart();
   </script>
 </body>
 </html>
+    
