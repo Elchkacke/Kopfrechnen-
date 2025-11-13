@@ -40,6 +40,7 @@
     }
     button.primary { background:#2563eb; color:white; }
     button.secondary { background:#e4e4e7; color:#111827; }
+
     #taskBox {
       margin-top:16px;
       padding:12px;
@@ -57,20 +58,28 @@
     .label { font-weight:600; }
     #status { margin-top:8px; font-size:14px; color:#4b5563; }
 
-    /* Lehrer-Menü (Overlay) */
+    /* Lehrer-Leiste */
     #topBar {
       max-width:600px;
       margin:0 auto 8px;
       display:flex;
       justify-content:space-between;
       align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
     }
     #cfgInfo {
       font-size:13px;
       color:#4b5563;
       text-align:left;
+      flex:1;
+    }
+    #topButtons {
+      display:flex;
+      gap:4px;
     }
 
+    /* Lehrer-Menü (Overlay) */
     #teacherOverlay {
       position:fixed;
       inset:0;
@@ -99,7 +108,7 @@
     }
     #teacherPanel .row { display:flex; justify-content:space-between; gap:8px; margin-top:10px; }
     #teacherMsg { font-size:13px; color:#4b5563; margin-top:4px; min-height:18px; }
-    .ops-row { display:flex; gap:8px; margin-top:4px; }
+    .ops-row { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; }
     .chip {
       display:inline-block;
       border-radius:999px;
@@ -119,7 +128,10 @@
 <body>
   <div id="topBar">
     <div id="cfgInfo">Konfiguration: wird geladen …</div>
-    <button id="btnTeacher" class="secondary">⚙️ Lehrer-Menü</button>
+    <div id="topButtons">
+      <button id="btnDashboard" class="secondary">📊 Dashboard</button>
+      <button id="btnTeacher" class="secondary">⚙️ Lehrer-Menü</button>
+    </div>
   </div>
 
   <div class="card">
@@ -204,12 +216,17 @@
 
   <script>
     /********** 1. SERVER-URL & LEHRER-PIN **********/
-    // Deine Apps-Script-Web-App-URL:
+    // 👉 HIER deine neue Web-App-URL eintragen – GENAU so, wie sie Apps Script anzeigt
+    // z.B. const SERVER_URL = 'https://script.google.com/macros/s/NEUE_ID/exec';
     const SERVER_URL = 'https://script.google.com/macros/s/AKfycbwnbRIl7Wem_RElmasAyOZ23HzF7Yl3NkDBDysoe6RPmeqRPNUjjWtayyNBi3LJolYrhg/exec';
-    // Lehrer-PIN für das Menü:
-    const TEACHER_PIN = '3697'; // <- hier ändern, z.B. "4711"
 
-    /********** 2. Feste Einstellungen (Startwerte) **********/
+    // Dashboard-URL wird AUTOMATISCH daraus gebaut → keine zweite ID mehr!
+    const DASHBOARD_BASE_URL = SERVER_URL + '?action=dashboard';
+
+    // Lehrer-PIN (gleich wie ADMIN_KEY in Code.gs)
+    const TEACHER_PIN = '3697';
+
+    /********** 2. Konfiguration (lokal im Browser) **********/
     let CONFIG = {
       count: 10,
       min: 1,
@@ -321,7 +338,7 @@
 
       const total = tasks.length;
       const durationSec = (Date.now() - startTime) / 1000;
-      const pct = total > 0 ? (correct / total * 100).toFixed(1) : '0.0';
+      const pct = total > 0 ? (correct / total * 100 * 1.0).toFixed(1) : '0.0';
 
       S('resultText').innerHTML =
         '<p>' + studentName + ' (' + studentClass + ')</p>' +
@@ -333,7 +350,7 @@
       sendResults(total, correct, durationSec);
     }
 
-    /********** 6. Ergebnisse senden (CORS-sicher) **********/
+    /********** 6. Ergebnisse senden (no-cors) **********/
     async function sendResults(total, correct, timeSec){
       S('status').textContent = 'Sende Ergebnisse …';
 
@@ -348,16 +365,12 @@
       };
 
       try {
-        // no-cors + text/plain: Browser macht keine CORS-Preflight,
-        // Apps Script liest e.postData.contents ganz normal.
         await fetch(SERVER_URL, {
           method: 'POST',
           mode: 'no-cors',
           headers: {'Content-Type': 'text/plain;charset=utf-8'},
           body: JSON.stringify(payload)
         });
-        // Wir können die Antwort im no-cors-Modus nicht lesen –
-        // aber der Request wurde abgeschickt.
         S('status').textContent = 'Ergebnisse wurden an den Server gesendet.';
       } catch (e) {
         S('status').textContent = 'Netzwerkfehler beim Senden: ' + e.message;
@@ -415,7 +428,7 @@
       }
     });
 
-    /********** 8. Lehrer-Menü (nur lokal, mit PIN) **********/
+    /********** 8. Lehrer-Menü **********/
     const overlay = S('teacherOverlay');
     const opsRow = S('opsRow');
 
@@ -427,10 +440,12 @@
       S('cfgDivMax').value  = CONFIG.divMax;
       S('cfgNeg').checked   = CONFIG.allowNeg;
       S('cfgDivInt').checked= CONFIG.divInt;
+
       const set = new Set((CONFIG.ops || ['+']).map(String));
       Array.from(opsRow.querySelectorAll('.chip')).forEach(ch=>{
         ch.classList.toggle('active', set.has(ch.dataset.op));
       });
+
       S('teacherMsg').textContent = '';
       S('teacherPin').value = '';
       overlay.style.display = 'flex';
@@ -472,6 +487,18 @@
       updateCfgInfo();
       S('teacherMsg').textContent = 'Konfiguration übernommen.';
       setTimeout(closeTeacher, 700);
+    });
+
+    /********** 9. Dashboard-Button **********/
+    S('btnDashboard').addEventListener('click', () => {
+      const pin = prompt('Lehrer-PIN für Dashboard:');
+      if (pin === null) return;
+      if (pin.trim() !== TEACHER_PIN) {
+        alert('Falsche PIN.');
+        return;
+      }
+      const url = DASHBOARD_BASE_URL + '&admin_key=' + encodeURIComponent(pin.trim());
+      window.open(url, '_blank');
     });
 
     // Startzustand
