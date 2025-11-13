@@ -77,6 +77,7 @@
     #topButtons {
       display:flex;
       gap:4px;
+      flex-wrap:wrap;
     }
 
     /* Lehrer-Menü (Overlay) */
@@ -126,6 +127,7 @@
   </style>
 </head>
 <body>
+  <!-- Lehrer-Leiste -->
   <div id="topBar">
     <div id="cfgInfo">Konfiguration: wird geladen …</div>
     <div id="topButtons">
@@ -216,18 +218,11 @@
 
   <script>
     /********** 1. SERVER-URL & LEHRER-PIN **********/
-    // 👉 HIER deine neue Web-App-URL eintragen – GENAU so, wie sie Apps Script anzeigt
-    // z.B. const SERVER_URL = 'https://script.google.com/macros/s/NEUE_ID/exec';
-    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbzP0kRmhmEhHra9Vb05wXCiY_TQuHNHJTLUmkff1X_NhJgz4eHwmH3JEBGVMj-LGpE9Qg/exec?action=dashboard&admin_key=1234
-';
-
-    // Dashboard-URL wird AUTOMATISCH daraus gebaut → keine zweite ID mehr!
+    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxY-TTL32hleoiAl33yK7VqIbFq_5PH2hA1rnLM5rS1lPXXIMLQP-t8ANiKr25Lj22zzw/exec';
     const DASHBOARD_BASE_URL = SERVER_URL + '?action=dashboard';
-
-    // Lehrer-PIN (gleich wie ADMIN_KEY in Code.gs)
     const TEACHER_PIN = '1234';
 
-    /********** 2. Konfiguration (lokal im Browser) **********/
+    /********** 2. Konfiguration (nur im Browser) **********/
     let CONFIG = {
       count: 10,
       min: 1,
@@ -351,9 +346,24 @@
       sendResults(total, correct, durationSec);
     }
 
-    /********** 6. Ergebnisse senden (no-cors) **********/
+    /********** 6. Ergebnisse + Aufgaben an Server senden **********/
     async function sendResults(total, correct, timeSec){
       S('status').textContent = 'Sende Ergebnisse …';
+
+      // Aufgaben einzeln mitgeben (für Fehlerschwerpunkte)
+      const taskPayload = tasks.map((t, idx) => {
+        const ans = answers[idx];
+        const ok = Math.abs(ans - t.erg) < 0.0001;
+        return {
+          index: idx + 1,
+          a: t.a,
+          b: t.b,
+          op: t.op,
+          answer: ans,
+          solution: t.erg,
+          correct: ok
+        };
+      });
 
       const payload = {
         run_id: 'run-' + Date.now(),
@@ -362,7 +372,8 @@
         total: total,
         correct: correct,
         time: timeSec,
-        score: correct * 10
+        score: correct * 10,
+        tasks: taskPayload
       };
 
       try {
