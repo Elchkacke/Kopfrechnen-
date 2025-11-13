@@ -57,7 +57,20 @@
     .label { font-weight:600; }
     #status { margin-top:8px; font-size:14px; color:#4b5563; }
 
-    /* Lehrer-Menü (einfaches Overlay, kein <dialog>) */
+    /* Lehrer-Menü (Overlay) */
+    #topBar {
+      max-width:600px;
+      margin:0 auto 8px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+    }
+    #cfgInfo {
+      font-size:13px;
+      color:#4b5563;
+      text-align:left;
+    }
+
     #teacherOverlay {
       position:fixed;
       inset:0;
@@ -100,18 +113,6 @@
       background:#2563eb;
       color:white;
       border-color:#2563eb;
-    }
-
-    #topBar {
-      max-width:600px;
-      margin:0 auto 8px;
-      display:flex;
-      justify-content:space-between;
-      align-items:center;
-    }
-    #cfgInfo {
-      font-size:13px;
-      color:#4b5563;
     }
   </style>
 </head>
@@ -204,9 +205,9 @@
   <script>
     /********** 1. SERVER-URL & LEHRER-PIN **********/
     // Deine Apps-Script-Web-App-URL:
-    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbz-vghvqrJB1OOSmD-LGlTcb8Be-G1W7T8rvayv4ZD1bfCgDd4O9UhjwFZYh-s0E3_U7w/exec';
+    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxLLn6nmGrhbCqmcZJ8anGm8Nrkp2wkdxIBxgQuWRRsGNN12XFAgMjzvjNYP9CTKQSZ/exec';
     // Lehrer-PIN für das Menü:
-    const TEACHER_PIN = '1234'; // <- hier ändern, z.B. "4711"
+    const TEACHER_PIN = '1234567'; // <- hier ändern, z.B. "4711"
 
     /********** 2. Feste Einstellungen (Startwerte) **********/
     let CONFIG = {
@@ -264,7 +265,6 @@
           erg = a / b;
         }
       } else {
-        // Fallback: Addition
         a = randInt(CONFIG.min, CONFIG.max);
         b = randInt(CONFIG.min, CONFIG.max);
         erg = a + b;
@@ -333,9 +333,10 @@
       sendResults(total, correct, durationSec);
     }
 
-    /********** 6. Ergebnisse senden **********/
+    /********** 6. Ergebnisse senden (CORS-sicher) **********/
     async function sendResults(total, correct, timeSec){
       S('status').textContent = 'Sende Ergebnisse …';
+
       const payload = {
         run_id: 'run-' + Date.now(),
         name: studentName,
@@ -345,20 +346,22 @@
         time: timeSec,
         score: correct * 10
       };
+
       try {
-        const res = await fetch(SERVER_URL, {
+        // no-cors + text/plain: Browser macht keine CORS-Preflight,
+        // Apps Script liest e.postData.contents ganz normal.
+        await fetch(SERVER_URL, {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          mode: 'no-cors',
+          headers: {'Content-Type': 'text/plain;charset=utf-8'},
           body: JSON.stringify(payload)
         });
-        const js = await res.json();
-        if (js.ok) {
-          S('status').textContent = 'Ergebnisse wurden gespeichert.';
-        } else {
-          S('status').textContent = 'Fehler beim Senden: ' + (js.error || 'unbekannt');
-        }
+        // Wir können die Antwort im no-cors-Modus nicht lesen –
+        // aber der Request wurde abgeschickt.
+        S('status').textContent = 'Ergebnisse wurden an den Server gesendet.';
       } catch (e) {
-        S('status').textContent = 'Netzwerkfehler: ' + e.message;
+        S('status').textContent = 'Netzwerkfehler beim Senden: ' + e.message;
+        console.error('SEND ERROR', e);
       }
     }
 
@@ -415,16 +418,15 @@
     /********** 8. Lehrer-Menü (nur lokal, mit PIN) **********/
     const overlay = S('teacherOverlay');
     const opsRow = S('opsRow');
+
     function openTeacher(){
-      // Form mit aktuellem CONFIG füllen
-      S('cfgCount').value = CONFIG.count;
-      S('cfgMin').value   = CONFIG.min;
-      S('cfgMax').value   = CONFIG.max;
+      S('cfgCount').value   = CONFIG.count;
+      S('cfgMin').value     = CONFIG.min;
+      S('cfgMax').value     = CONFIG.max;
       S('cfgMultMax').value = CONFIG.multMax;
       S('cfgDivMax').value  = CONFIG.divMax;
       S('cfgNeg').checked   = CONFIG.allowNeg;
-      S('cfgDivInt').checked = CONFIG.divInt;
-      // Chips setzen
+      S('cfgDivInt').checked= CONFIG.divInt;
       const set = new Set((CONFIG.ops || ['+']).map(String));
       Array.from(opsRow.querySelectorAll('.chip')).forEach(ch=>{
         ch.classList.toggle('active', set.has(ch.dataset.op));
@@ -433,9 +435,7 @@
       S('teacherPin').value = '';
       overlay.style.display = 'flex';
     }
-    function closeTeacher(){
-      overlay.style.display = 'none';
-    }
+    function closeTeacher(){ overlay.style.display = 'none'; }
 
     S('btnTeacher').addEventListener('click', openTeacher);
     S('teacherClose').addEventListener('click', closeTeacher);
@@ -480,4 +480,3 @@
   </script>
 </body>
 </html>
-    
