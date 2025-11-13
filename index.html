@@ -1,289 +1,190 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
-  <meta charset="utf-8">
-  <title>Kopfrechnen Trainer</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    :root{
-      --ink:#111; --muted:#6b7280; --bg:#fafafa; --card:#fff; --line:#e5e7eb; --accent:#0a84ff;
-    }
-    *{box-sizing:border-box}
-    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-    .wrap{max-width:900px;margin:0 auto;padding:16px}
-    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-    h1{font-size:22px;margin:0}
-    button{appearance:none;border:none;background:var(--accent);color:#fff;border-radius:10px;padding:10px 14px;font-size:15px;cursor:pointer}
-    button.secondary{background:#e5e7eb;color:#111}
-    button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
-    button:disabled{opacity:.6;cursor:not-allowed}
-    .grid{display:grid;gap:12px}
-    label{display:grid;gap:6px}
-    input,select{padding:10px;border:1px solid var(--line);border-radius:10px;font-size:15px;background:#fff}
-    .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
-    .hint{color:var(--muted);font-size:13px}
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .ops{display:flex;gap:8px;flex-wrap:wrap}
-    .chip{
-      padding:10px 12px;border:1px solid var(--line);border-radius:999px;background:#fff;cursor:pointer;user-select:none;
-      min-width:44px;text-align:center;font-weight:600
-    }
-    .chip.active{background:#eef4ff;border-color:#cfe1ff;color:#0a53ff}
-    dialog{border:none;border-radius:16px;padding:0;max-width:92vw}
-    dialog form{padding:16px}
-    .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
-    .toolbar{display:flex;gap:8px;justify-content:flex-end;align-items:center;margin-bottom:10px}
-    .pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:4px 10px;font-size:13px;color:var(--muted)}
-    .danger{background:#ef4444}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kopfrechnen Trainer</title>
+<style>
+body {font-family: system-ui, sans-serif; background:#f6f6f6; margin:0; padding:2em; text-align:center;}
+h1 {margin-top:0;}
+input,button {font-size:1.2em; padding:0.4em;}
+input {border:1px solid #ccc; border-radius:6px;}
+button {border:none; border-radius:8px; cursor:pointer;}
+button.primary {background:#007bff; color:white;}
+#cfgInfo {margin:1em 0; color:#333;}
+#adminDlg {border:none; border-radius:12px; padding:1em; background:#fff; box-shadow:0 2px 10px rgba(0,0,0,0.3);}
+.chip {display:inline-block; border:1px solid #aaa; border-radius:20px; padding:0.3em 0.8em; margin:0.2em; cursor:pointer;}
+.chip.active {background:#007bff; color:#fff;}
+.hint {font-size:0.8em; color:#777;}
+</style>
 </head>
-<body>
-<div class="wrap">
-  <header>
-    <h1>🧮 Kopfrechnen</h1>
-    <div class="row">
-      <span id="cfgInfo" class="pill">Konfiguration: —</span>
-      <button id="openAdmin" class="secondary">Lehrer-Menü</button>
-    </div>
-  </header>
 
-  <!-- Schülerbereich -->
-  <section class="card grid" id="studentArea">
-    <div class="hint">Bitte Name & Klasse eingeben. (Die Aufgabeneinstellungen werden zentral von der Lehrkraft vorgegeben.)</div>
-    <div class="grid" style="grid-template-columns:1fr;gap:12px">
-      <label><span>Name</span><input id="stName" placeholder="Vorname Nachname" autocomplete="name"></label>
-      <label><span>Klasse</span><input id="stClass" placeholder="z. B. 5a"></label>
-    </div>
-    <div class="row">
-      <button id="startBtn">Los geht’s</button>
-      <button id="sendExample" class="ghost">Test-Upload</button>
-      <span id="status" class="hint"></span>
-    </div>
-  </section>
+<body>
+  <h1>Kopfrechnen Trainer</h1>
+
+  <div id="cfgInfo">Konfiguration: wird geladen …</div>
+
+  <div>
+    <label>Name:<br><input id="stName" placeholder="Vorname Nachname"></label><br><br>
+    <label>Klasse:<br><input id="stClass" placeholder="z. B. 5a"></label><br><br>
+    <button id="startBtn" class="primary">Los geht’s</button>
+    <button id="sendExample">Test-Upload</button>
+  </div>
+
+  <p id="status"></p>
+
+  <button id="openAdmin">⚙️ Lehrer-Einstellungen</button>
 
   <!-- Lehrer-Dialog -->
   <dialog id="adminDlg">
-    <form method="dialog" id="adminForm" style="min-width:min(92vw,740px);">
-      <header class="row" style="justify-content:space-between;margin-bottom:8px">
-        <h3 style="margin:0">Lehrer-Einstellungen</h3>
-        <button id="adminClose" value="cancel" type="submit" class="secondary">Schließen</button>
-      </header>
-
-      <section class="grid">
-        <!-- Admin + Toolbar -->
-        <div class="card">
-          <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px">
-            <label><span>Admin-PIN</span><input id="adminPin" type="password" inputmode="numeric" placeholder="PIN eingeben" required></label>
-            <div class="toolbar">
-              <button id="adminLoad" type="button" class="secondary">Konfiguration laden</button>
-              <button id="adminSave" type="button">Speichern</button>
-              <button id="adminOpenDashboard" type="button" class="ghost">Dashboard öffnen</button>
-            </div>
-          </div>
-          <div class="hint" id="adminMsg"></div>
-        </div>
-
-        <!-- Rechenoptionen (anklickbar) -->
-        <div class="card">
-          <div class="row" style="justify-content:space-between">
-            <strong>Rechenarten</strong>
-            <span class="hint">Tippe, um auszuwählen</span>
-          </div>
-          <div id="opsChips" class="ops">
-            <div class="chip" data-op="+">+</div>
-            <div class="chip" data-op="-">−</div>
-            <div class="chip" data-op="*">×</div>
-            <div class="chip" data-op="/">÷</div>
-          </div>
-        </div>
-
-        <!-- Zahlenbereich & weitere Optionen -->
-        <div class="card grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
-          <label><span>Anzahl Aufgaben</span><input id="cfgCount" type="number" min="1" max="200" value="12"></label>
-          <label><span>Min</span><input id="cfgMin" type="number" value="1"></label>
-          <label><span>Max</span><input id="cfgMax" type="number" value="150"></label>
-          <label><span>Multiplikations-Max (×)</span><input id="cfgMultMax" type="number" value="12"></label>
-          <label><span>Divisions-Max (÷)</span><input id="cfgDivMax" type="number" value="12"></label>
-          <label class="row" style="justify-content:flex-start"><input id="cfgNeg" type="checkbox"> negative Ergebnisse erlauben</label>
-          <label class="row" style="justify-content:flex-start"><input id="cfgDivInt" type="checkbox" checked> Division nur ganzzahlig</label>
-        </div>
-      </section>
-
-      <footer class="foot">
-        <button id="adminSave2" type="button">Speichern</button>
-        <button id="adminOpenDashboard2" type="button" class="ghost">Dashboard öffnen</button>
-        <button id="adminClose2" type="submit" value="cancel" class="secondary">Schließen</button>
-      </footer>
-    </form>
+    <h3>Lehrer-Einstellungen</h3>
+    <label>Admin-PIN:<br>
+      <input type="password" id="adminPin" placeholder="PIN eingeben">
+    </label>
+    <p id="adminMsg" class="hint"></p>
+    <button id="adminLoad">Konfiguration laden</button>
+    <button id="adminSave" class="primary">Speichern</button>
+    <button id="openDash">Dashboard öffnen</button>
+    <hr>
+    <div>
+      <div id="opsChips">
+        <span class="chip" data-op="+">+</span>
+        <span class="chip" data-op="-">−</span>
+        <span class="chip" data-op="*">×</span>
+        <span class="chip" data-op="/">÷</span>
+      </div>
+      <div>
+        <label>Anzahl Aufgaben: <input id="cfgCount" type="number" min="1" max="100" value="12"></label><br>
+        <label>Min: <input id="cfgMin" type="number" value="1"></label><br>
+        <label>Max: <input id="cfgMax" type="number" value="150"></label><br>
+        <label>Multiplikations-Max (×): <input id="cfgMultMax" type="number" value="12"></label><br>
+        <label>Divisions-Max (÷): <input id="cfgDivMax" type="number" value="12"></label><br>
+        <label><input id="cfgNeg" type="checkbox"> Negative Ergebnisse erlauben</label><br>
+        <label><input id="cfgDivInt" type="checkbox" checked> Division nur ganzzahlig</label>
+      </div>
+    </div>
+    <br>
+    <button id="adminSave2" class="primary">Speichern</button>
+    <button onclick="document.getElementById('adminDlg').close()">Schließen</button>
   </dialog>
-</div>
 
-<script>
-  // === SERVER CONFIG ===
-  // TODO: Hier deine Google Apps Script /exec URL eintragen:
-  const SERVER_URL = 'https://script.google.com/macros/s/AKfycbw4sLymsta0CJkcnyl4bcpv0ezg0GUKe_a-Qwc6sHjMkcjNr526xCczeJHwXwVTFG4UWA/exec';
+  <!-- ==================== SCRIPT ==================== -->
+  <script>
+    /* === HIER DEINE GOOGLE WEB-APP-URL EINTRAGEN === */
+    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxwBW0SQor_7odwQlm-IwDNn5T14_vJTxgAfgAE4bZyGyikVFUgPo6-rCpLrSN9bKhvag/exec';
 
-  // === Helpers ===
-  const S = (id)=>document.getElementById(id);
-  const qs = (sel,root=document)=>root.querySelector(sel);
-  const qsa = (sel,root=document)=>Array.from(root.querySelectorAll(sel));
+    const S=id=>document.getElementById(id);
+    const QA=(sel,root=document)=>Array.from(root.querySelectorAll(sel));
 
-  // === UI Bindings ===
-  S('openAdmin').addEventListener('click', ()=> S('adminDlg').showModal());
-  S('adminClose').addEventListener('click', ()=> S('adminDlg').close());
-  S('adminClose2').addEventListener('click', ()=> S('adminDlg').close());
+    /* Globale Config */
+    let CURRENT_CFG = {count:12,ops:['+','-','*','/'],min:1,max:150,multMax:12,divMax:12,allowNeg:false,divInt:true};
 
-  // Chips: Rechenarten toggeln
-  const opsChips = S('opsChips');
-  opsChips.addEventListener('click', (e)=>{
-    const chip = e.target.closest('.chip');
-    if (!chip) return;
-    chip.classList.toggle('active');
-  });
+    /* Form lesen/schreiben */
+    function readCfg(){
+      const ops=QA('.chip.active').map(c=>c.dataset.op);
+      return {
+        count:+S('cfgCount').value||12, ops:ops.length?ops:['+'],
+        min:+S('cfgMin').value||1, max:+S('cfgMax').value||150,
+        multMax:+S('cfgMultMax').value||12, divMax:+S('cfgDivMax').value||12,
+        allowNeg:S('cfgNeg').checked, divInt:S('cfgDivInt').checked
+      };
+    }
+    function writeCfg(c){
+      if(!c)return;
+      S('cfgCount').value=c.count??12;
+      S('cfgMin').value=c.min??1; S('cfgMax').value=c.max??150;
+      S('cfgMultMax').value=c.multMax??12; S('cfgDivMax').value=c.divMax??12;
+      S('cfgNeg').checked=!!c.allowNeg; S('cfgDivInt').checked=c.divInt!==false;
+      const sel=new Set((c.ops||['+','-','*','/']).map(String));
+      QA('.chip').forEach(ch=>ch.classList.toggle('active',sel.has(ch.dataset.op)));
+    }
+    function showCfgInfo(c){
+      S('cfgInfo').textContent=`Konfiguration: ${c.count} Aufgaben, Ops: ${(c.ops||[]).join(' ')}`;
+    }
 
-  // Build cfg from form
-  function readConfigFromForm(){
-    const ops = qsa('.chip.active', opsChips).map(c=>c.dataset.op);
-    return {
-      count: Number(S('cfgCount').value || 12),
-      ops: ops.length ? ops : ['+'], // Fallback auf + falls nichts gewählt
-      min: Number(S('cfgMin').value || 1),
-      max: Number(S('cfgMax').value || 150),
-      multMax: Number(S('cfgMultMax').value || 12),
-      divMax: Number(S('cfgDivMax').value || 12),
-      allowNeg: !!S('cfgNeg').checked,
-      divInt: !!S('cfgDivInt').checked
-    };
-  }
-
-  // Set form from cfg
-  function writeFormFromConfig(cfg){
-    S('cfgCount').value   = cfg.count ?? 12;
-    S('cfgMin').value     = cfg.min ?? 1;
-    S('cfgMax').value     = cfg.max ?? 150;
-    S('cfgMultMax').value = cfg.multMax ?? 12;
-    S('cfgDivMax').value  = cfg.divMax ?? 12;
-    S('cfgNeg').checked   = !!cfg.allowNeg;
-    S('cfgDivInt').checked= cfg.divInt !== false;
-
-    // Chips setzen
-    const set = new Set((cfg.ops || ['+','-','*','/']).map(String));
-    qsa('.chip', opsChips).forEach(ch=>{
-      ch.classList.toggle('active', set.has(ch.dataset.op));
+    /* Chips klicken */
+    S('opsChips').addEventListener('click',e=>{
+      const chip=e.target.closest('.chip'); if(chip)chip.classList.toggle('active');
     });
-  }
 
-  // Lehrer: Konfiguration laden (GET action=config)
-  async function loadConfig(){
-    const msg = S('adminMsg');
-    msg.textContent = 'Lade Konfiguration …';
-    try{
-      const url = `${SERVER_URL}?action=config&t=${Date.now()}`;
-      const res = await fetch(url);
-      const text = await res.text();        // zuerst Text lesen (falls HTML-Fehler)
-      let js;
-      try { js = JSON.parse(text); } catch { js = null; }
-      if (!res.ok) throw new Error(`HTTP ${res.status} – ${text.slice(0,200)}`);
-      if (!js || js.ok !== true) {
-        throw new Error(js && js.error ? js.error : `Ungültige Antwort: ${text.slice(0,200)}`);
+    /* Laden */
+    async function loadConfig(){
+      const msg=S('adminMsg'); msg.textContent='Lade Konfiguration …';
+      try{
+        const r=await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`,{cache:'no-store'});
+        const txt=await r.text();
+        const js=JSON.parse(txt);
+        if(!js.ok)throw new Error(js.error||'Fehlerhafte Antwort');
+        CURRENT_CFG=js.config; writeCfg(CURRENT_CFG); showCfgInfo(CURRENT_CFG);
+        msg.textContent='Konfiguration geladen.';
+      }catch(e){
+        msg.textContent='Load failed: '+e.message;
+        console.error(e);
       }
-      writeFormFromConfig(js.config || {});
-      msg.textContent = 'Konfiguration geladen.';
-      S('cfgInfo').textContent  = `Konfiguration: ${js.config?.count ?? '–'} Aufgaben, Ops: ${(js.config?.ops||[]).join(' ') || '—'}`;
-    }catch(e){
-      msg.innerHTML = 'Fehler beim Laden: ' + e.message +
-        '<br><span class="hint">Tipp: Öffne im Browser ' +
-        '<code>?action=init_config</code> einmal, falls der Config-Tab noch fehlt.</span>';
     }
-  }
 
-  // --- Speichern der Konfig (POST form-url-encoded) mit PIN & klaren Fehlern ---
-  async function saveConfig(){
-    const pin = (S('adminPin').value || '').trim();
-    if (!pin){ alert('Bitte Admin-PIN eingeben'); return; }
-    const cfg = readConfigFromForm();
-
-    const body = new URLSearchParams();
-    body.set('type','config_form');
-    body.set('admin_key', pin);
-    body.set('cfg', JSON.stringify(cfg));
-
-    const msg = S('adminMsg');
-    msg.textContent = 'Speichere …';
-    try{
-      const res  = await fetch(SERVER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: body.toString()
-      });
-      const text = await res.text();
-      if (!res.ok) throw new Error(`HTTP ${res.status} – ${text.slice(0,200)}`);
-      if (text.trim() !== 'OK') throw new Error(`Unerwartete Antwort: ${text.slice(0,200)}`);
-      msg.textContent = 'Gespeichert.';
-      S('cfgInfo').textContent  = `Konfiguration: ${cfg.count} Aufgaben, Ops: ${cfg.ops.join(' ')}`;
-    }catch(e){
-      // Häufigste Ursache: falsche PIN → "Unauthorized"
-      msg.innerHTML = 'Fehler beim Speichern: ' + e.message +
-        '<br><span class="hint">Prüfe Admin-PIN und ob die Web-App mit "Jeder, auch anonym" veröffentlicht ist.</span>';
+    /* Speichern */
+    async function saveConfig(){
+      const msg=S('adminMsg'); msg.textContent='Speichere …';
+      const pin=(S('adminPin').value||'').trim(); if(!pin){alert('PIN fehlt');return;}
+      const cfg=readCfg();
+      try{
+        const body=new URLSearchParams();
+        body.set('type','config_form'); body.set('admin_key',pin);
+        body.set('cfg',JSON.stringify(cfg));
+        const r=await fetch(SERVER_URL,{method:'POST',
+          headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+          body:body.toString(),cache:'no-store'});
+        const txt=await r.text();
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        if(txt.trim()!=='OK')throw new Error('Antwort: '+txt.slice(0,100));
+        CURRENT_CFG=cfg; showCfgInfo(cfg); msg.textContent='Gespeichert.';
+      }catch(e){ msg.textContent='Save failed: '+e.message; console.error(e); }
     }
-  }
 
-  // Buttons neu binden (falls noch nicht)
-  S('adminLoad').onclick  = loadConfig;
-  S('adminSave').onclick  = saveConfig;
-  S('adminSave2').onclick = saveConfig;
+    /* Dashboard */
+    function openDashboard(){
+      const pin=(S('adminPin').value||'').trim();
+      if(!pin){alert('PIN fehlt');return;}
+      window.open(`${SERVER_URL}?action=dashboard&admin_key=${encodeURIComponent(pin)}`,'_blank','noopener');
+    }
 
-  // Dashboard öffnen mit PIN
-  function openDashboard(){
-    const pin = (S('adminPin').value || '').trim();
-    if (!pin){ alert('Bitte Admin-PIN eingeben'); return; }
-    window.open(`${SERVER_URL}?action=dashboard&admin_key=${encodeURIComponent(pin)}`, '_blank', 'noopener');
-  }
-  S('adminOpenDashboard').addEventListener('click', openDashboard);
-  S('adminOpenDashboard2').addEventListener('click', openDashboard);
-
-  // ==== Schüler-Demo ====
-  // Hier würdest du deinen eigentlichen Trainer starten.
-  // Für die GitHub-Demo gibt es einen "Test-Upload" und eine vereinfachte "Los geht's"-Aktion.
-  let sending = false;
-
-  S('sendExample').addEventListener('click', async ()=>{
-    if (sending) return; sending = true;
-    S('status').textContent = 'Sende Test-Datensatz …';
-    const payload = {
-      run_id: 'demo-' + Date.now(),
-      name: S('stName').value.trim() || 'Demo Schüler',
-      group: S('stClass').value.trim() || 'Demo',
-      total: 12,
-      correct: 9,
-      time: 63.2,
-      score: 95
+    /* Start */
+    S('startBtn').onclick=async()=>{
+      const name=S('stName').value.trim();
+      const cls=S('stClass').value.trim();
+      if(!name||!cls){alert('Bitte Name & Klasse');return;}
+      if(!CURRENT_CFG)await loadConfig();
+      alert(`Starte Trainer für ${name} (${cls})\n${CURRENT_CFG.count} Aufgaben, Ops: ${CURRENT_CFG.ops.join(' ')}`);
     };
-    try{
-      const res = await fetch(SERVER_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
-      const js = await res.json();
-      if (js.ok) S('status').textContent = 'Test-Ergebnis gesendet.';
-      else S('status').textContent = 'Fehler: ' + (js.error || 'unbekannt');
-    }catch(e){ S('status').textContent = 'Netzwerkfehler: ' + e.message; }
-    finally{ sending=false; }
-  });
 
-  S('startBtn').addEventListener('click', ()=>{
-    const name  = S('stName').value.trim();
-    const group = S('stClass').value.trim();
-    if (!name || !group){ alert('Bitte Name & Klasse eingeben'); return; }
-    // Hier deinen echten Trainer starten…
-    alert(`Starte Trainer für ${name} (${group}).\nDie Aufgabenparameter kommen aus der zentralen Konfiguration.`);
-  });
+    /* Test-Upload */
+    S('sendExample').onclick=async()=>{
+      S('status').textContent='Sende Testdaten …';
+      const payload={run_id:'demo-'+Date.now(),name:S('stName').value||'Demo',
+        group:S('stClass').value||'Demo',total:12,correct:9,time:63.2,score:95};
+      try{
+        const r=await fetch(SERVER_URL,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+        const js=await r.json();
+        S('status').textContent=js.ok?'Gesendet.':'Fehler: '+js.error;
+      }catch(e){S('status').textContent='Netzwerkfehler: '+e.message;}
+    };
 
-  // Beim Laden einmal Config anzeigen (optional)
-  (async ()=>{
-    try{
-      const res = await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`);
-      const js  = await res.json();
-      if (js.ok) S('cfgInfo').textContent = `Konfiguration: ${js.config?.count ?? '–'} Aufgaben, Ops: ${(js.config?.ops||[]).join(' ') || '—'}`;
-    }catch(e){ /* still ok */ }
-  })();
-</script>
+    /* Events */
+    S('openAdmin').onclick=()=>S('adminDlg').showModal();
+    S('adminLoad').onclick=loadConfig;
+    S('adminSave').onclick=saveConfig;
+    S('adminSave2').onclick=saveConfig;
+    S('openDash').onclick=openDashboard;
+
+    /* Info beim Start */
+    (async()=>{
+      try{
+        const r=await fetch(`${SERVER_URL}?action=config&t=${Date.now()}`,{cache:'no-store'});
+        const js=await r.json();
+        if(js.ok)CURRENT_CFG=js.config,showCfgInfo(CURRENT_CFG);
+      }catch(_){showCfgInfo(CURRENT_CFG);}
+    })();
+  </script>
 </body>
 </html>
