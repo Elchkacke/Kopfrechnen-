@@ -187,7 +187,7 @@
 (function(){
   // Basis-URL der Web-App (ohne Query-Parameter)
   const href   = window.location.href;
-  const baseUrl = href.split('?')[0];
+  const baseUrl = href.split('https://script.google.com/macros/s/AKfycbxmHegvBVeMLwqRP8yLcm6NzIfhlc6-IRHxxp-NoEp7aH157qX4GjyQI1tBv5EtQQzGGA/exec')[0];
   const params  = new URLSearchParams(window.location.search);
   const ADMIN_KEY = params.get('admin_key') || '';
 
