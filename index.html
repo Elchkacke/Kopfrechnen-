@@ -2,545 +2,380 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <title>Kopfrechnen Trainer</title>
+  <title>Kopfrechnen – Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     body {
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background:#f4f4f5;
       margin:0;
       padding:16px;
-      text-align:center;
+      background:#f4f4f5;
+      color:#111827;
     }
-    .card {
-      max-width:600px;
+    .wrap {
+      max-width:1000px;
       margin:0 auto;
-      background:white;
-      border-radius:12px;
-      padding:16px;
-      box-shadow:0 2px 8px rgba(0,0,0,0.06);
     }
-    h1 { margin-top:0; }
-    input {
-      font-size:16px;
-      padding:8px;
+    h1 { margin-top:0; font-size:22px; }
+    .hint { font-size:13px; color:#6b7280; }
+    table {
       width:100%;
-      max-width:260px;
-      border-radius:8px;
-      border:1px solid #d4d4d8;
-      margin:4px 0 10px;
+      border-collapse:collapse;
+      margin-top:12px;
+      background:white;
+      border-radius:10px;
+      overflow:hidden;
     }
-    button {
-      font-size:16px;
-      padding:8px 16px;
-      border-radius:999px;
-      border:none;
+    th, td {
+      padding:8px 10px;
+      border-bottom:1px solid #e5e7eb;
+      font-size:14px;
+    }
+    th {
+      text-align:left;
+      background:#f3f4f6;
+      font-weight:600;
+    }
+    tr:hover {
+      background:#eff6ff;
       cursor:pointer;
-      margin:4px;
     }
-    button.primary { background:#2563eb; color:white; }
-    button.secondary { background:#e4e4e7; color:#111827; }
-
-    #taskBox {
-      margin-top:16px;
+    tr.selected {
+      background:#dbeafe !important;
+    }
+    .pill {
+      display:inline-block;
+      padding:2px 8px;
+      border-radius:999px;
+      font-size:12px;
+      background:#e5e7eb;
+      color:#374151;
+    }
+    #detailBox {
+      margin-top:24px;
+      background:white;
+      border-radius:10px;
       padding:12px;
-      border-radius:12px;
-      background:#f9fafb;
-      display:none;
+      box-shadow:0 1px 4px rgba(0,0,0,0.06);
     }
-    #resultBox {
-      margin-top:16px;
-      padding:12px;
-      border-radius:12px;
-      background:#ecfdf3;
-      display:none;
+    #detailBox h2 {
+      margin:0 0 4px;
+      font-size:18px;
     }
-    .label { font-weight:600; }
-    #status { margin-top:8px; font-size:14px; color:#4b5563; }
-
-    /* Lehrer-Leiste */
-    #topBar {
-      max-width:600px;
-      margin:0 auto 8px;
+    #detailHint { font-size:13px; color:#6b7280; margin-bottom:8px; }
+    .bad { color:#b91c1c; font-weight:600; }
+    .good { color:#15803d; font-weight:600; }
+    .toolbar {
       display:flex;
       justify-content:space-between;
       align-items:center;
       gap:8px;
       flex-wrap:wrap;
+      margin-bottom:8px;
     }
-    #cfgInfo {
-      font-size:13px;
-      color:#4b5563;
-      text-align:left;
-      flex:1;
-    }
-    #topButtons {
-      display:flex;
-      gap:4px;
-      flex-wrap:wrap;
-    }
-
-    /* Lehrer-Menü (Overlay) */
-    #teacherOverlay {
-      position:fixed;
-      inset:0;
-      background:rgba(0,0,0,0.4);
-      display:none;
-      align-items:center;
-      justify-content:center;
-      z-index:999;
-    }
-    #teacherPanel {
-      background:white;
-      border-radius:12px;
-      max-width:420px;
-      width:90%;
-      padding:16px;
-      box-shadow:0 4px 20px rgba(0,0,0,0.3);
-      text-align:left;
-    }
-    #teacherPanel h2 { margin-top:0; text-align:center; }
-    #teacherPanel label { display:block; margin:6px 0 2px; font-size:14px; font-weight:600; }
-    #teacherPanel input[type="number"],
-    #teacherPanel input[type="password"] {
-      width:100%;
-      max-width:none;
-      margin-bottom:6px;
-    }
-    #teacherPanel .row { display:flex; justify-content:space-between; gap:8px; margin-top:10px; }
-    #teacherMsg { font-size:13px; color:#4b5563; margin-top:4px; min-height:18px; }
-    .ops-row { display:flex; gap:8px; margin-top:4px; flex-wrap:wrap; }
-    .chip {
-      display:inline-block;
+    button {
+      font-size:14px;
+      padding:6px 12px;
       border-radius:999px;
-      border:1px solid #d4d4d8;
-      padding:4px 10px;
+      border:none;
       cursor:pointer;
-      font-weight:600;
-      user-select:none;
-    }
-    .chip.active {
       background:#2563eb;
       color:white;
-      border-color:#2563eb;
+    }
+    button.secondary {
+      background:#e5e7eb;
+      color:#111827;
+    }
+    #status { margin-top:4px; font-size:13px; color:#4b5563; }
+
+    /* Fehlerschwerpunkte-Balken */
+    .error-bar {
+      height:8px;
+      border-radius:999px;
+      background:#fee2e2;
+      position:relative;
+      overflow:hidden;
+    }
+    .error-bar-inner {
+      position:absolute;
+      inset:0;
+      background:#b91c1c;
     }
   </style>
 </head>
 <body>
-  <!-- Lehrer-Leiste -->
-  <div id="topBar">
-    <div id="cfgInfo">Konfiguration: wird geladen …</div>
-    <div id="topButtons">
-      <button id="btnDashboard" class="secondary">📊 Dashboard</button>
-      <button id="btnTeacher" class="secondary">⚙️ Lehrer-Menü</button>
+<div class="wrap">
+  <div class="toolbar">
+    <h1>🧮 Kopfrechnen – Dashboard</h1>
+    <div>
+      <span id="updated" class="pill">–</span>
+      <button id="btnReload" class="secondary">Aktualisieren</button>
+    </div>
+  </div>
+  <div class="hint">
+    Übersicht nach Klasse. Klicke eine Klasse in der Tabelle an, um Details und Fehlerschwerpunkte zu sehen.
+  </div>
+
+  <!-- Klassen-Übersicht -->
+  <table id="classTable">
+    <thead>
+      <tr>
+        <th>Klasse</th>
+        <th>Teilnehmer</th>
+        <th>Ø richtig %</th>
+        <th>Ø Zeit/Aufgabe (s)</th>
+        <th>Ø Score</th>
+        <th>Summe richtig</th>
+      </tr>
+    </thead>
+    <tbody id="classBody">
+      <tr><td colspan="6">Lade Daten …</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Detailansicht -->
+  <div id="detailBox" style="display:none;">
+    <h2 id="detailTitle">Details</h2>
+    <div id="detailHint" class="hint"></div>
+
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Klasse</th>
+            <th>Richtig / Gesamt</th>
+            <th>%</th>
+            <th>Ø Zeit/Aufgabe (s)</th>
+            <th>Score</th>
+            <th>Zeitstempel</th>
+          </tr>
+        </thead>
+        <tbody id="detailBody">
+          <tr><td colspan="7">Keine Daten</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Fehlerschwerpunkte nach Rechenart -->
+    <h3 style="margin-top:16px;">Fehlerschwerpunkte (nach Rechenart)</h3>
+    <div class="hint" id="errorHint">
+      Zeigt für diese Klasse, bei welchen Rechenarten am häufigsten Fehler auftreten.
+    </div>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>Rechenart</th>
+            <th>Anzahl Aufgaben</th>
+            <th>Fehler</th>
+            <th>Fehlerquote</th>
+            <th>Visualisierung</th>
+          </tr>
+        </thead>
+        <tbody id="errorBody">
+          <tr><td colspan="5">Keine Fehlerschwerpunkt-Daten.</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <div class="card">
-    <h1>🧮 Kopfrechnen Trainer</h1>
+  <div id="status"></div>
+</div>
 
-    <!-- Startbereich: Name & Klasse -->
-    <div id="startBox">
-      <p>Bitte Name und Klasse eingeben:</p>
-      <div>
-        <div class="label">Name</div>
-        <input id="inpName" placeholder="Vorname Nachname">
-      </div>
-      <div>
-        <div class="label">Klasse</div>
-        <input id="inpClass" placeholder="z. B. 5a">
-      </div>
-      <button id="btnStart" class="primary">Los geht’s</button>
-    </div>
+<script>
+(function(){
+  // Basis-URL der Web-App (ohne Query-Parameter)
+  const href   = window.location.href;
+  const baseUrl = href.split('?')[0];
+  const params  = new URLSearchParams(window.location.search);
+  const ADMIN_KEY = params.get('admin_key') || '';
 
-    <!-- Aufgabenbereich -->
-    <div id="taskBox">
-      <div id="taskHeader" class="label"></div>
-      <div id="taskText" style="font-size:26px; margin:12px 0;"></div>
-      <div>
-        <div>Deine Antwort:</div>
-        <input id="inpAnswer" type="number" inputmode="decimal">
-      </div>
-      <button id="btnNext" class="primary">Weiter</button>
-      <button id="btnAbort" class="secondary">Abbrechen</button>
-    </div>
+  const classBody   = document.getElementById('classBody');
+  const detailBox   = document.getElementById('detailBox');
+  const detailBody  = document.getElementById('detailBody');
+  const detailTitle = document.getElementById('detailTitle');
+  const detailHint  = document.getElementById('detailHint');
+  const errorBody   = document.getElementById('errorBody');
+  const statusEl    = document.getElementById('status');
+  const updatedEl   = document.getElementById('updated');
+  const btnReload   = document.getElementById('btnReload');
 
-    <!-- Ergebnisbereich -->
-    <div id="resultBox">
-      <h3>Auswertung</h3>
-      <div id="resultText"></div>
-      <div id="status"></div>
-      <button id="btnRestart" class="secondary">Neue Runde</button>
-    </div>
-  </div>
+  function fmtPercent(p){
+    return (p != null && !isNaN(p)) ? p.toFixed(1).replace('.',',')+' %' : '–';
+  }
+  function fmtTime(t){
+    return (t != null && !isNaN(t)) ? t.toFixed(2).replace('.',',') : '–';
+  }
+  function fmtScore(s){
+    return (s != null && !isNaN(s)) ? s.toFixed(1).replace('.',',') : '–';
+  }
 
-  <!-- Lehrer-Menü Overlay -->
-  <div id="teacherOverlay">
-    <div id="teacherPanel">
-      <h2>Lehrer-Konfiguration</h2>
-      <label for="teacherPin">Lehrer-PIN</label>
-      <input type="password" id="teacherPin" placeholder="PIN eingeben">
+  function symbolForOp(op){
+    if (op === '+') return '+ (Addition)';
+    if (op === '-') return '− (Subtraktion)';
+    if (op === '*') return '× (Multiplikation)';
+    if (op === '/') return '÷ (Division)';
+    return op || '?';
+  }
 
-      <label>Anzahl Aufgaben</label>
-      <input type="number" id="cfgCount" min="1" max="200">
+  async function loadStats(){
+    statusEl.textContent = 'Lade Klassenübersicht …';
+    classBody.innerHTML = '<tr><td colspan="6">Lade Daten …</td></tr>';
 
-      <label>Zahlenbereich (Min / Max)</label>
-      <div class="row">
-        <input type="number" id="cfgMin" placeholder="Min">
-        <input type="number" id="cfgMax" placeholder="Max">
-      </div>
+    try{
+      const url = baseUrl + '?action=stats&t=' + Date.now();
+      const res = await fetch(url, {cache:'no-store'});
+      const js  = await res.json();
 
-      <label>Rechenarten</label>
-      <div class="ops-row" id="opsRow">
-        <div class="chip" data-op="+">+</div>
-        <div class="chip" data-op="-">−</div>
-        <div class="chip" data-op="*">×</div>
-        <div class="chip" data-op="/">÷</div>
-      </div>
-
-      <label>Multiplikations-Max (×)</label>
-      <input type="number" id="cfgMultMax">
-
-      <label>Divisions-Max (÷)</label>
-      <input type="number" id="cfgDivMax">
-
-      <label><input type="checkbox" id="cfgNeg"> Negative Ergebnisse erlauben</label><br>
-      <label><input type="checkbox" id="cfgDivInt" checked> Division nur ganzzahlig</label>
-
-      <div id="teacherMsg"></div>
-
-      <div class="row" style="margin-top:12px;">
-        <button id="teacherApply" class="primary">Übernehmen</button>
-        <button id="teacherClose" class="secondary">Schließen</button>
-      </div>
-    </div>
-  </div>
-
-  <script>
-    /********** 1. SERVER-URL & LEHRER-PIN **********/
-    // HIER deine NEUE Web-App-URL eintragen (mit /exec am Ende)
-    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxmHegvBVeMLwqRP8yLcm6NzIfhlc6-IRHxxp-NoEp7aH157qX4GjyQI1tBv5EtQQzGGA/exec';
-    const DASHBOARD_BASE_URL = SERVER_URL + '?action=dashboard';
-    const TEACHER_PIN = '1234';
-
-    /********** 2. Konfiguration + localStorage **********/
-    const CONFIG_KEY = 'kopf_config_v1';
-
-    let CONFIG = {
-      count: 10,
-      min: 1,
-      max: 150,
-      ops: ['+','-','*','/'],
-      allowNeg: false,
-      divInt: true,
-      multMax: 12,
-      divMax: 12
-    };
-
-    const S = id => document.getElementById(id);
-
-    function loadConfigFromStorage(){
-      try {
-        const raw = localStorage.getItem(CONFIG_KEY);
-        if (!raw) return;
-        const saved = JSON.parse(raw);
-        if (saved && typeof saved === 'object') {
-          CONFIG = Object.assign(CONFIG, saved);
-        }
-      } catch (e) {
-        console.warn('Konfiguration konnte nicht aus localStorage geladen werden:', e);
+      if (js.ok === false) {
+        // Serverseitiger Fehler wird direkt angezeigt
+        classBody.innerHTML =
+          '<tr><td colspan="6">Fehler in stats: ' +
+          (js.error || 'Unbekannter Fehler') + '</td></tr>';
+        statusEl.textContent = 'Fehler in stats: ' + (js.error || '');
+        return;
       }
-    }
 
-    function saveConfigToStorage(){
-      try {
-        localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
-      } catch (e) {
-        console.warn('Konfiguration konnte nicht im localStorage gespeichert werden:', e);
-      }
-    }
-
-    function updateCfgInfo(){
-      const opsText = (CONFIG.ops && CONFIG.ops.length) ? CONFIG.ops.join(' ') : '—';
-      S('cfgInfo').textContent = `Konfiguration: ${CONFIG.count} Aufgaben, Bereich ${CONFIG.min}–${CONFIG.max}, Ops: ${opsText}`;
-    }
-
-    /********** 3. Aufgaben-Generator **********/
-    function randInt(a,b){
-      return Math.floor(Math.random() * (b - a + 1)) + a;
-    }
-
-    function generateTask(){
-      const ops = CONFIG.ops && CONFIG.ops.length ? CONFIG.ops : ['+'];
-      const op = ops[Math.floor(Math.random() * ops.length)];
-      let a, b, erg;
-
-      if (op === '+') {
-        a = randInt(CONFIG.min, CONFIG.max);
-        b = randInt(CONFIG.min, CONFIG.max);
-        erg = a + b;
-      } else if (op === '-') {
-        a = randInt(CONFIG.min, CONFIG.max);
-        b = randInt(CONFIG.min, CONFIG.max);
-        erg = a - b;
-        if (!CONFIG.allowNeg && erg < 0) {
-          const tmp = a; a = b; b = tmp;
-          erg = a - b;
-        }
-      } else if (op === '*') {
-        a = randInt(1, CONFIG.multMax || 12);
-        b = randInt(1, CONFIG.multMax || 12);
-        erg = a * b;
-      } else if (op === '/') {
-        if (CONFIG.divInt) {
-          b = randInt(1, CONFIG.divMax || 12);
-          erg = randInt(1, CONFIG.divMax || 12);
-          a = b * erg;
-        } else {
-          b = randInt(1, CONFIG.divMax || 12);
-          a = randInt(1, (CONFIG.divMax || 12) * (CONFIG.divMax || 12));
-          erg = a / b;
-        }
+      const classes = js.classes || [];
+      if (!classes.length){
+        classBody.innerHTML = '<tr><td colspan="6">Noch keine Ergebnisse.</td></tr>';
       } else {
-        a = randInt(CONFIG.min, CONFIG.max);
-        b = randInt(CONFIG.min, CONFIG.max);
-        erg = a + b;
-      }
-      return { a, b, op, erg };
-    }
-
-    /********** 4. Zustände **********/
-    let currentIndex = 0;
-    let tasks = [];
-    let answers = [];
-    let startTime = null;
-    let studentName = '';
-    let studentClass = '';
-
-    /********** 5. UI-Funktionen **********/
-    function showStart(){
-      S('startBox').style.display = 'block';
-      S('taskBox').style.display = 'none';
-      S('resultBox').style.display = 'none';
-      S('status').textContent = '';
-    }
-
-    function showTask(){
-      S('startBox').style.display = 'none';
-      S('taskBox').style.display = 'block';
-      S('resultBox').style.display = 'none';
-
-      const t = tasks[currentIndex];
-      S('taskHeader').textContent = 'Aufgabe ' + (currentIndex + 1) + ' von ' + CONFIG.count;
-      S('taskText').textContent = t.a + ' ' + t.op + ' ' + t.b + ' = ?';
-      S('inpAnswer').value = '';
-      S('inpAnswer').focus();
-    }
-
-    function showResult(){
-      S('startBox').style.display = 'none';
-      S('taskBox').style.display = 'none';
-      S('resultBox').style.display = 'block';
-
-      let correct = 0;
-      let detail = '';
-      for (let i = 0; i < tasks.length; i++) {
-        const t = tasks[i];
-        const userAns = answers[i];
-        const ok = Math.abs(userAns - t.erg) < 0.0001;
-        if (ok) correct++;
-        detail +=
-          (i+1) + '. ' +
-          t.a + ' ' + t.op + ' ' + t.b +
-          ' = ' + t.erg +
-          ' (deine Antwort: ' + userAns + (ok ? ' ✓' : ' ✗') + ')<br>';
-      }
-
-      const total = tasks.length;
-      const durationSec = (Date.now() - startTime) / 1000;
-      const pct = total > 0 ? (correct / total * 100 * 1.0).toFixed(1) : '0.0';
-
-      S('resultText').innerHTML =
-        '<p>' + studentName + ' (' + studentClass + ')</p>' +
-        '<p>Richtig: ' + correct + ' von ' + total + ' (' + pct + '%)</p>' +
-        '<p>Gesamtzeit: ' + durationSec.toFixed(1) + ' s (Ø ' +
-        (durationSec/total).toFixed(2) + ' s pro Aufgabe)</p>' +
-        '<hr>' + detail;
-
-      sendResults(total, correct, durationSec);
-    }
-
-    /********** 6. Ergebnisse + Aufgaben an Server senden **********/
-    async function sendResults(total, correct, timeSec){
-      S('status').textContent = 'Sende Ergebnisse …';
-
-      const taskPayload = tasks.map((t, idx) => {
-        const ans = answers[idx];
-        const ok = Math.abs(ans - t.erg) < 0.0001;
-        return {
-          index: idx + 1,
-          a: t.a,
-          b: t.b,
-          op: t.op,
-          answer: ans,
-          solution: t.erg,
-          correct: ok
-        };
-      });
-
-      const payload = {
-        run_id: 'run-' + Date.now(),
-        name: studentName,
-        group: studentClass,
-        total: total,
-        correct: correct,
-        time: timeSec,
-        score: correct * 10,
-        tasks: taskPayload
-      };
-
-      try {
-        await fetch(SERVER_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: {'Content-Type': 'text/plain;charset=utf-8'},
-          body: JSON.stringify(payload)
+        classBody.innerHTML = '';
+        classes.forEach(cls=>{
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>'+cls.class+'</td>'+
+            '<td>'+cls.participants+'</td>'+
+            '<td>'+fmtPercent(cls.avgPercent)+'</td>'+
+            '<td>'+fmtTime(cls.avgTimeSec)+'</td>'+
+            '<td>'+fmtScore(cls.avgScore)+'</td>'+
+            '<td>'+cls.sumCorrect+'</td>';
+          tr.addEventListener('click', ()=>selectClass(cls.class, tr));
+          classBody.appendChild(tr);
         });
-        S('status').textContent = 'Ergebnisse wurden an den Server gesendet.';
-      } catch (e) {
-        S('status').textContent = 'Netzwerkfehler beim Senden: ' + e.message;
-        console.error('SEND ERROR', e);
       }
+      updatedEl.textContent = 'Stand: ' + (js.updated || '–');
+      statusEl.textContent = 'Übersicht geladen.';
+    }catch(e){
+      console.error('loadStats error', e);
+      classBody.innerHTML =
+        '<tr><td colspan="6">Fehler beim Laden der Übersicht: '+
+        (e.message || e) +'</td></tr>';
+      statusEl.textContent = 'Fehler beim Laden der Übersicht: ' + (e.message || e);
     }
+  }
 
-    /********** 7. Schüler-Events **********/
-    S('btnStart').addEventListener('click', () => {
-      studentName = S('inpName').value.trim();
-      studentClass = S('inpClass').value.trim();
-      if (!studentName || !studentClass) {
-        alert('Bitte Name und Klasse eingeben.');
+  async function selectClass(clsName, rowEl){
+    Array.from(classBody.querySelectorAll('tr')).forEach(tr=>tr.classList.remove('selected'));
+    if (rowEl) rowEl.classList.add('selected');
+
+    statusEl.textContent = 'Lade Details für Klasse '+clsName+' …';
+    detailBox.style.display = 'block';
+    detailTitle.textContent = 'Klasse ' + clsName;
+    detailBody.innerHTML = '<tr><td colspan="7">Lade …</td></tr>';
+    errorBody.innerHTML  = '<tr><td colspan="5">Lade Fehlerschwerpunkte …</td></tr>';
+
+    try{
+      const url = baseUrl + '?action=class&cls=' +
+                  encodeURIComponent(clsName) +
+                  '&t=' + Date.now();
+      const res = await fetch(url, {cache:'no-store'});
+      const js  = await res.json();
+
+      if (js.ok === false) {
+        // Serverseitiger Fehler hier klar anzeigen
+        detailBody.innerHTML =
+          '<tr><td colspan="7">Fehler in class: '+
+          (js.error || 'Unbekannter Fehler') +'</td></tr>';
+        errorBody.innerHTML =
+          '<tr><td colspan="5">Fehler in class: '+
+          (js.error || 'Unbekannter Fehler') +'</td></tr>';
+        statusEl.textContent = 'Fehler in class: ' + (js.error || '');
         return;
       }
-      tasks = [];
-      answers = [];
-      for (let i = 0; i < CONFIG.count; i++) {
-        tasks.push(generateTask());
-      }
-      currentIndex = 0;
-      startTime = Date.now();
-      showTask();
-    });
 
-    S('btnNext').addEventListener('click', () => {
-      const val = S('inpAnswer').value;
-      if (val === '') {
-        alert('Bitte eine Antwort eingeben.');
-        return;
-      }
-      answers[currentIndex] = Number(val);
-      if (currentIndex < CONFIG.count - 1) {
-        currentIndex++;
-        showTask();
+      // 1) Lauf-Details
+      const rows = js.rows || [];
+      if (!rows.length){
+        detailBody.innerHTML =
+          '<tr><td colspan="7">Noch keine Ergebnisse für diese Klasse.</td></tr>';
       } else {
-        showResult();
+        detailBody.innerHTML = '';
+        rows.forEach(r=>{
+          const tr = document.createElement('tr');
+          const pctVal = (r.percent != null) ? Number(r.percent) : null;
+          const pctStr = (pctVal != null && !isNaN(pctVal))
+                         ? pctVal.toFixed(1).replace('.',',')
+                         : '–';
+          const pctClass = (pctVal != null && !isNaN(pctVal))
+                           ? (pctVal < 60 ? 'bad' : 'good')
+                           : '';
+          // 👉 kein Date.parse, einfach String anzeigen
+          const ts = (r.timestamp || '').toString();
+
+          tr.innerHTML =
+            '<td>'+ (r.name || '') +'</td>'+
+            '<td>'+ (r.group || '') +'</td>'+
+            '<td>'+ (r.correct || 0) +' / '+ (r.total || 0) +'</td>'+
+            '<td class="'+pctClass+'">'+ pctStr +'</td>'+
+            '<td>'+ fmtTime(r.time_s) +'</td>'+
+            '<td>'+ fmtScore(r.score) +'</td>'+
+            '<td>'+ ts +'</td>';
+          detailBody.appendChild(tr);
+        });
       }
-    });
+      detailHint.textContent =
+        'Rot markierte Prozentwerte (< 60 %) zeigen mögliche Schwächen einzelner Schüler.';
 
-    S('btnAbort').addEventListener('click', () => {
-      if (confirm('Willst du wirklich abbrechen?')) {
-        showStart();
+      // 2) Fehlerschwerpunkte nach Rechenart
+      const ops = js.errorsByOp || [];
+      if (!ops.length){
+        errorBody.innerHTML =
+          '<tr><td colspan="5">Noch keine Aufgaben-Details für diese Klasse gespeichert.</td></tr>';
+      } else {
+        errorBody.innerHTML = '';
+        ops.forEach(o=>{
+          const tr = document.createElement('tr');
+          const rateVal = Number(o.errorRate || 0);
+          const rateStr = rateVal.toFixed(1).replace('.',',') + ' %';
+
+          const barOuter = document.createElement('div');
+          barOuter.className = 'error-bar';
+          const barInner = document.createElement('div');
+          barInner.className = 'error-bar-inner';
+          barInner.style.width = Math.min(100, Math.max(0, rateVal)) + '%';
+          barOuter.appendChild(barInner);
+
+          const tdVis = document.createElement('td');
+          tdVis.appendChild(barOuter);
+
+          tr.innerHTML =
+            '<td>'+ symbolForOp(o.op) +'</td>'+
+            '<td>'+ (o.total || 0) +'</td>'+
+            '<td>'+ (o.errors || 0) +'</td>'+
+            '<td>'+ rateStr +'</td>';
+          tr.appendChild(tdVis);
+
+          errorBody.appendChild(tr);
+        });
       }
-    });
 
-    S('btnRestart').addEventListener('click', () => {
-      showStart();
-    });
-
-    S('inpAnswer').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        S('btnNext').click();
-      }
-    });
-
-    /********** 8. Lehrer-Menü **********/
-    const overlay = S('teacherOverlay');
-    const opsRow = S('opsRow');
-
-    function openTeacher(){
-      S('cfgCount').value   = CONFIG.count;
-      S('cfgMin').value     = CONFIG.min;
-      S('cfgMax').value     = CONFIG.max;
-      S('cfgMultMax').value = CONFIG.multMax;
-      S('cfgDivMax').value  = CONFIG.divMax;
-      S('cfgNeg').checked   = CONFIG.allowNeg;
-      S('cfgDivInt').checked= CONFIG.divInt;
-
-      const set = new Set((CONFIG.ops || ['+']).map(String));
-      Array.from(opsRow.querySelectorAll('.chip')).forEach(ch=>{
-        ch.classList.toggle('active', set.has(ch.dataset.op));
-      });
-
-      S('teacherMsg').textContent = '';
-      S('teacherPin').value = '';
-      overlay.style.display = 'flex';
+      statusEl.textContent = 'Details für Klasse '+clsName+' geladen.';
+    }catch(e){
+      console.error('selectClass error', e);
+      detailBody.innerHTML =
+        '<tr><td colspan="7">Fehler beim Laden der Details: '+
+        (e.message || e) +'</td></tr>';
+      errorBody.innerHTML  =
+        '<tr><td colspan="5">Fehler beim Laden der Fehlerschwerpunkte.</td></tr>';
+      statusEl.textContent = 'Fehler beim Laden der Details: ' + (e.message || e);
     }
-    function closeTeacher(){ overlay.style.display = 'none'; }
+  }
 
-    S('btnTeacher').addEventListener('click', openTeacher);
-    S('teacherClose').addEventListener('click', closeTeacher);
-    overlay.addEventListener('click', (e)=>{
-      if (e.target === overlay) closeTeacher();
-    });
-
-    opsRow.addEventListener('click', (e)=>{
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      chip.classList.toggle('active');
-    });
-
-    S('teacherApply').addEventListener('click', ()=>{
-      const pin = S('teacherPin').value.trim();
-      if (pin !== TEACHER_PIN) {
-        S('teacherMsg').textContent = 'Falsche PIN.';
-        return;
-      }
-      const newCfg = {
-        count: Number(S('cfgCount').value || CONFIG.count),
-        min: Number(S('cfgMin').value || CONFIG.min),
-        max: Number(S('cfgMax').value || CONFIG.max),
-        multMax: Number(S('cfgMultMax').value || CONFIG.multMax),
-        divMax: Number(S('cfgDivMax').value || CONFIG.divMax),
-        allowNeg: !!S('cfgNeg').checked,
-        divInt: !!S('cfgDivInt').checked,
-        ops: []
-      };
-      const activeOps = Array.from(opsRow.querySelectorAll('.chip.active')).map(ch=>ch.dataset.op);
-      newCfg.ops = activeOps.length ? activeOps : ['+'];
-
-      CONFIG = newCfg;
-      saveConfigToStorage();      // 👉 HIER: dauerhaft speichern
-      updateCfgInfo();
-      S('teacherMsg').textContent = 'Konfiguration übernommen und gespeichert.';
-      setTimeout(closeTeacher, 700);
-    });
-
-    /********** 9. Dashboard-Button **********/
-    S('btnDashboard').addEventListener('click', () => {
-      const pin = prompt('Lehrer-PIN für Dashboard:');
-      if (pin === null) return;
-      if (pin.trim() !== TEACHER_PIN) {
-        alert('Falsche PIN.');
-        return;
-      }
-      const url = DASHBOARD_BASE_URL + '&admin_key=' + encodeURIComponent(pin.trim());
-      window.open(url, '_blank');
-    });
-
-    // Startzustand: Konfig aus localStorage holen, dann UI setzen
-    loadConfigFromStorage();
-    updateCfgInfo();
-    showStart();
-  </script>
+  btnReload.addEventListener('click', loadStats);
+  loadStats();
+})();
+</script>
 </body>
 </html>
