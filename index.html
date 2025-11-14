@@ -218,11 +218,14 @@
 
   <script>
     /********** 1. SERVER-URL & LEHRER-PIN **********/
-    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbxhta6CVnJRil5aKaA3uIE1i4CBoG4Hdqrbkh4jjgM-t9duBX9kPdl-l8lbeTjcdfO47g/exec';
+    // HIER deine NEUE Web-App-URL eintragen (mit /exec am Ende)
+    const SERVER_URL = 'https://script.google.com/macros/s/AKfycbwYNz1gUUL0OdyPu4tsaobGO2m0x7BPJnVvD5meydPFUQp3j64f4eRtEVOl1Xdy9EtMnQ/exec';
     const DASHBOARD_BASE_URL = SERVER_URL + '?action=dashboard';
     const TEACHER_PIN = '1234';
 
-    /********** 2. Konfiguration (nur im Browser) **********/
+    /********** 2. Konfiguration + localStorage **********/
+    const CONFIG_KEY = 'kopf_config_v1';
+
     let CONFIG = {
       count: 10,
       min: 1,
@@ -235,6 +238,27 @@
     };
 
     const S = id => document.getElementById(id);
+
+    function loadConfigFromStorage(){
+      try {
+        const raw = localStorage.getItem(CONFIG_KEY);
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (saved && typeof saved === 'object') {
+          CONFIG = Object.assign(CONFIG, saved);
+        }
+      } catch (e) {
+        console.warn('Konfiguration konnte nicht aus localStorage geladen werden:', e);
+      }
+    }
+
+    function saveConfigToStorage(){
+      try {
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(CONFIG));
+      } catch (e) {
+        console.warn('Konfiguration konnte nicht im localStorage gespeichert werden:', e);
+      }
+    }
 
     function updateCfgInfo(){
       const opsText = (CONFIG.ops && CONFIG.ops.length) ? CONFIG.ops.join(' ') : '—';
@@ -350,7 +374,6 @@
     async function sendResults(total, correct, timeSec){
       S('status').textContent = 'Sende Ergebnisse …';
 
-      // Aufgaben einzeln mitgeben (für Fehlerschwerpunkte)
       const taskPayload = tasks.map((t, idx) => {
         const ans = answers[idx];
         const ok = Math.abs(ans - t.erg) < 0.0001;
@@ -496,8 +519,9 @@
       newCfg.ops = activeOps.length ? activeOps : ['+'];
 
       CONFIG = newCfg;
+      saveConfigToStorage();      // 👉 HIER: dauerhaft speichern
       updateCfgInfo();
-      S('teacherMsg').textContent = 'Konfiguration übernommen.';
+      S('teacherMsg').textContent = 'Konfiguration übernommen und gespeichert.';
       setTimeout(closeTeacher, 700);
     });
 
@@ -513,7 +537,8 @@
       window.open(url, '_blank');
     });
 
-    // Startzustand
+    // Startzustand: Konfig aus localStorage holen, dann UI setzen
+    loadConfigFromStorage();
     updateCfgInfo();
     showStart();
   </script>
