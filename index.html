@@ -72,6 +72,35 @@
     }
     .label { font-weight:600; }
     #status { margin-top:8px; font-size:14px; color:#4b5563; }
+    table.result-table {
+      width:100%;
+      border-collapse:collapse;
+      font-size:14px;
+      margin-top:12px;
+    }
+    .result-table th,
+    .result-table td {
+      border-bottom:1px solid #e4e4e7;
+      padding:6px;
+    }
+    .result-table tr:nth-child(even) {
+      background:#f9fafb;
+    }
+    .result-table .bad-row {
+      background:#fef2f2;
+    }
+    .stats-grid {
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+      gap:8px;
+      margin-top:12px;
+      text-align:left;
+    }
+    .stats-grid div {
+      background:#f4f4f5;
+      border-radius:8px;
+      padding:8px;
+    }
 
     /* Lehrer-Leiste */
     #topBar {
@@ -139,6 +168,28 @@
       color:white;
       border-color:#2563eb;
     }
+    #dashboardOverlay {
+      position:fixed;
+      inset:0;
+      display:none;
+      background:rgba(0,0,0,0.4);
+      align-items:center;
+      justify-content:center;
+      z-index:998;
+    }
+    #dashboardPanel {
+      background:white;
+      border-radius:12px;
+      max-width:700px;
+      width:95%;
+      max-height:90vh;
+      overflow:auto;
+      padding:18px;
+      box-shadow:0 4px 25px rgba(0,0,0,0.2);
+      text-align:left;
+    }
+    #dashboardPanel h2 { margin-top:0; }
+    #dashboardPanel table { font-size:13px; }
   </style>
 </head>
 <body>
@@ -184,6 +235,8 @@
     <div id="resultBox">
       <h3>Auswertung</h3>
       <div id="resultText"></div>
+      <div id="detailTable"></div>
+      <div id="hotspotSummary"></div>
       <div id="status"></div>
       <button id="btnRestart" class="secondary">Neue Runde</button>
     </div>
@@ -221,6 +274,7 @@
 
       <label><input type="checkbox" id="cfgNeg"> Negative Ergebnisse erlauben</label><br>
       <label><input type="checkbox" id="cfgDivInt" checked> Division nur ganzzahlig</label>
+      <label><input type="checkbox" id="cfgEven"> Nur gerade Zahlen</label>
 
       <div id="teacherMsg"></div>
 
@@ -228,6 +282,17 @@
         <button id="teacherApply" class="primary">Übernehmen</button>
         <button id="teacherClose" class="secondary">Schließen</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Dashboard Overlay -->
+  <div id="dashboardOverlay">
+    <div id="dashboardPanel">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+        <h2 style="margin:0">📊 Lehrer-Dashboard</h2>
+        <button id="dashboardClose" class="secondary">Schließen</button>
+      </div>
+      <div id="dashboardContent">Noch keine Ergebnisse vorhanden.</div>
     </div>
   </div>
 
@@ -243,7 +308,8 @@
       allowNeg: false,
       divInt: true,
       multMax: 12,
-      divMax: 12
+      divMax: 12,
+      evenOnly: false
     };
 
     if (window.SERVER_CONFIG && typeof window.SERVER_CONFIG === 'object') {
@@ -263,40 +329,52 @@
       return Math.floor(Math.random() * (b - a + 1)) + a;
     }
 
+    function randEven(a,b){
+      let start = a % 2 === 0 ? a : a + 1;
+      if (start > b) return randInt(a,b);
+      const range = Math.floor((b - start) / 2);
+      return start + 2 * Math.floor(Math.random() * (range + 1));
+    }
+
+    function pickNumber(min,max){
+      if (!CONFIG.evenOnly) return randInt(min,max);
+      return randEven(min,max);
+    }
+
     function generateTask(){
       const ops = CONFIG.ops && CONFIG.ops.length ? CONFIG.ops : ['+'];
       const op = ops[Math.floor(Math.random() * ops.length)];
       let a, b, erg;
 
       if (op === '+') {
-        a = randInt(CONFIG.min, CONFIG.max);
-        b = randInt(CONFIG.min, CONFIG.max);
+        a = pickNumber(CONFIG.min, CONFIG.max);
+        b = pickNumber(CONFIG.min, CONFIG.max);
         erg = a + b;
       } else if (op === '-') {
-        a = randInt(CONFIG.min, CONFIG.max);
-        b = randInt(CONFIG.min, CONFIG.max);
+        a = pickNumber(CONFIG.min, CONFIG.max);
+        b = pickNumber(CONFIG.min, CONFIG.max);
         erg = a - b;
         if (!CONFIG.allowNeg && erg < 0) {
           const tmp = a; a = b; b = tmp;
           erg = a - b;
         }
       } else if (op === '*') {
-        a = randInt(1, CONFIG.multMax || 12);
-        b = randInt(1, CONFIG.multMax || 12);
+        a = pickNumber(1, CONFIG.multMax || 12);
+        b = pickNumber(1, CONFIG.multMax || 12);
         erg = a * b;
       } else if (op === '/') {
         if (CONFIG.divInt) {
-          b = randInt(1, CONFIG.divMax || 12);
-          erg = randInt(1, CONFIG.divMax || 12);
+          b = pickNumber(1, CONFIG.divMax || 12);
+          erg = pickNumber(1, CONFIG.divMax || 12);
           a = b * erg;
         } else {
-          b = randInt(1, CONFIG.divMax || 12);
-          a = randInt(1, (CONFIG.divMax || 12) * (CONFIG.divMax || 12));
+          b = pickNumber(1, CONFIG.divMax || 12);
+          a = pickNumber(1, (CONFIG.divMax || 12) * (CONFIG.divMax || 12));
           erg = a / b;
         }
       } else {
-        a = randInt(CONFIG.min, CONFIG.max);
-        b = randInt(CONFIG.min, CONFIG.max);
+        a = pickNumber(CONFIG.min, CONFIG.max);
+        b = pickNumber(CONFIG.min, CONFIG.max);
         erg = a + b;
       }
       return { a, b, op, erg };
@@ -307,6 +385,8 @@
     let tasks = [];
     let answers = [];
     let startTime = null;
+    let questionStart = null;
+    let taskDurations = [];
     let studentName = '';
     let studentClass = '';
 
@@ -328,6 +408,7 @@
       S('taskText').textContent = t.a + ' ' + t.op + ' ' + t.b + ' = ?';
       S('inpAnswer').value = '';
       S('inpAnswer').focus();
+      questionStart = Date.now();
     }
 
     function showResult(){
@@ -337,16 +418,25 @@
 
       let correct = 0;
       let detail = '';
+      const rows = [];
+      const opStats = {};
       for (let i = 0; i < tasks.length; i++) {
         const t = tasks[i];
         const userAns = answers[i];
         const ok = Math.abs(userAns - t.erg) < 0.0001;
         if (ok) correct++;
+        const duration = taskDurations[i] || 0;
+        const stat = opStats[t.op] || { total:0, correct:0, time:0 };
+        stat.total += 1;
+        stat.time += duration;
+        if (ok) stat.correct += 1;
+        opStats[t.op] = stat;
         detail +=
           (i+1) + '. ' +
           t.a + ' ' + t.op + ' ' + t.b +
           ' = ' + t.erg +
           ' (deine Antwort: ' + userAns + (ok ? ' ✓' : ' ✗') + ')<br>';
+        rows.push(`<tr class="${ok ? '' : 'bad-row'}"><td>${i+1}</td><td>${t.a} ${t.op} ${t.b}</td><td>${t.erg}</td><td>${userAns ?? '—'}</td><td>${ok ? '✓' : '✗'}</td><td>${duration.toFixed(1)} s</td></tr>`);
       }
 
       const total = tasks.length;
@@ -360,7 +450,22 @@
         (durationSec/total).toFixed(2) + ' s pro Aufgabe)</p>' +
         '<hr>' + detail;
 
+      S('detailTable').innerHTML =
+        '<table class="result-table"><thead><tr><th>#</th><th>Aufgabe</th><th>Lösung</th><th>Antwort</th><th>Richtig?</th><th>Zeit</th></tr></thead><tbody>' +
+        rows.join('') + '</tbody></table>';
+
+      const hotspotBlocks = Object.entries(opStats).map(([op, stat]) => {
+        const acc = stat.total ? (stat.correct / stat.total * 100).toFixed(1) : '0.0';
+        const avgTime = stat.total ? (stat.time / stat.total).toFixed(1) : '0.0';
+        const highlight = stat.correct / stat.total < 0.75 ? ' style="color:#b91c1c;font-weight:600;"' : '';
+        return `<div${highlight}><div class="label">${op}</div><div>Trefferquote: ${acc}%</div><div>Ø Zeit: ${avgTime} s</div></div>`;
+      });
+      S('hotspotSummary').innerHTML =
+        '<div class="label" style="margin-top:16px;">Fehlerschwerpunkte & Zeit</div>' +
+        '<div class="stats-grid">' + (hotspotBlocks.join('') || '<div>Keine Daten</div>') + '</div>';
+
       sendResults(total, correct, durationSec);
+      storeRun(total, correct, durationSec, opStats);
     }
 
     /********** Ergebnisse + Aufgaben an Server senden **********/
@@ -389,7 +494,8 @@
         correct: correct,
         time: timeSec,
         score: correct * 10,
-        tasks: taskPayload
+        tasks: taskPayload,
+        durations: taskDurations
       };
 
       try {
@@ -416,11 +522,13 @@
       }
       tasks = [];
       answers = [];
+      taskDurations = [];
       for (let i = 0; i < CONFIG.count; i++) {
         tasks.push(generateTask());
       }
       currentIndex = 0;
       startTime = Date.now();
+      questionStart = Date.now();
       showTask();
     });
 
@@ -431,6 +539,9 @@
         return;
       }
       answers[currentIndex] = Number(val);
+      if (questionStart) {
+        taskDurations[currentIndex] = (Date.now() - questionStart) / 1000;
+      }
       if (currentIndex < CONFIG.count - 1) {
         currentIndex++;
         showTask();
@@ -468,6 +579,7 @@
       S('cfgDivMax').value  = CONFIG.divMax;
       S('cfgNeg').checked   = CONFIG.allowNeg;
       S('cfgDivInt').checked= CONFIG.divInt;
+      S('cfgEven').checked  = CONFIG.evenOnly;
 
       const set = new Set((CONFIG.ops || ['+']).map(String));
       Array.from(opsRow.querySelectorAll('.chip')).forEach(ch=>{
@@ -506,6 +618,7 @@
         divMax: Number(S('cfgDivMax').value || CONFIG.divMax),
         allowNeg: !!S('cfgNeg').checked,
         divInt: !!S('cfgDivInt').checked,
+        evenOnly: !!S('cfgEven').checked,
         ops: []
       };
       const activeOps = Array.from(opsRow.querySelectorAll('.chip.active')).map(ch=>ch.dataset.op);
@@ -534,6 +647,18 @@
     });
 
     /********** Dashboard-Button **********/
+    const dashOverlay = S('dashboardOverlay');
+    const dashContent = S('dashboardContent');
+    function openDashboard(){
+      dashOverlay.style.display = 'flex';
+      renderDashboard();
+    }
+    function closeDashboard(){ dashOverlay.style.display = 'none'; }
+    S('dashboardClose').addEventListener('click', closeDashboard);
+    dashOverlay.addEventListener('click', (e)=>{
+      if (e.target === dashOverlay) closeDashboard();
+    });
+
     S('btnDashboard').addEventListener('click', () => {
       const pin = prompt('Lehrer-PIN für Dashboard:');
       if (pin === null) return;
@@ -541,9 +666,82 @@
         alert('Falsche PIN.');
         return;
       }
-      const url = DASHBOARD_BASE_URL + '&admin_key=' + encodeURIComponent(pin.trim());
-      window.open(url, '_blank');
+      openDashboard();
     });
+
+    const STORAGE_KEY = 'kopftrainer_runs';
+    function loadRuns(){
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+      } catch (e) {
+        console.error('LOAD RUNS', e);
+        return [];
+      }
+    }
+    function saveRuns(runs){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(runs.slice(0, 200)));
+    }
+    function storeRun(total, correct, timeSec, opStats){
+      const runs = loadRuns();
+      runs.unshift({
+        ts: Date.now(),
+        name: studentName,
+        group: studentClass,
+        total,
+        correct,
+        timeSec,
+        opStats,
+        accuracy: total ? correct / total : 0
+      });
+      saveRuns(runs);
+    }
+    function renderDashboard(){
+      const runs = loadRuns();
+      if (!runs.length) {
+        dashContent.textContent = 'Es liegen noch keine lokalen Ergebnisse vor.';
+        return;
+      }
+      const avgAcc = (runs.reduce((sum,r)=>sum + (r.accuracy||0),0) / runs.length * 100).toFixed(1);
+      const avgTime = (runs.reduce((sum,r)=>sum + (r.timeSec||0),0) / runs.length).toFixed(1);
+      const lastRuns = runs.slice(0, 12).map(r => {
+        const date = new Date(r.ts).toLocaleString();
+        const pct = (r.accuracy * 100).toFixed(1);
+        const timeText = (r.timeSec || 0).toFixed(1);
+        return `<tr><td>${date}</td><td>${r.name}</td><td>${r.group}</td><td>${r.correct}/${r.total}</td><td>${pct}%</td><td>${timeText} s</td></tr>`;
+      }).join('');
+
+      const combinedOps = {};
+      runs.forEach(run => {
+        Object.entries(run.opStats || {}).forEach(([op, stat]) => {
+          const block = combinedOps[op] || { total:0, correct:0, time:0 };
+          block.total += stat.total || 0;
+          block.correct += stat.correct || 0;
+          block.time += stat.time || 0;
+          combinedOps[op] = block;
+        });
+      });
+      const hotspotTable = Object.entries(combinedOps)
+        .map(([op, stat]) => {
+          const acc = stat.total ? (stat.correct / stat.total * 100).toFixed(1) : '0.0';
+          const avg = stat.total ? (stat.time / stat.total).toFixed(1) : '0.0';
+          return { op, stat, acc, avg };
+        })
+        .sort((a,b) => Number(a.acc) - Number(b.acc))
+        .map(row => `<tr><td>${row.op}</td><td>${row.stat.correct}/${row.stat.total}</td><td>${row.acc}%</td><td>${row.avg} s</td></tr>`)
+        .join('');
+
+      dashContent.innerHTML = `
+        <div class="stats-grid">
+          <div><div class="label">Gesamttrainings</div><div style="font-size:24px;">${runs.length}</div></div>
+          <div><div class="label">Ø Trefferquote</div><div style="font-size:24px;">${avgAcc}%</div></div>
+          <div><div class="label">Ø Zeit pro Training</div><div style="font-size:24px;">${avgTime} s</div></div>
+        </div>
+        <h3>Letzte Ergebnisse</h3>
+        <table class="result-table"><thead><tr><th>Datum</th><th>Name</th><th>Klasse</th><th>Richtig</th><th>Quote</th><th>Zeit</th></tr></thead><tbody>${lastRuns}</tbody></table>
+        <h3>Fehlerschwerpunkte (alle Schüler)</h3>
+        <table class="result-table"><thead><tr><th>Operator</th><th>Richtig</th><th>Quote</th><th>Ø Zeit</th></tr></thead><tbody>${hotspotTable || '<tr><td colspan="4">Keine Daten</td></tr>'}</tbody></table>
+      `;
+    }
 
     // Startzustand
     updateCfgInfo();
